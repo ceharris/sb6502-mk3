@@ -1,0 +1,39 @@
+GAL22V10
+6502 mk3
+
+E     RWB   A7    A6    A5    A4    A3    IOAB  NC    NC    HA19  GND
+VPB   IOE0  IOE1  CFGE  CONE  RAME  ROME  MREQ  BRWR  WR    BRRD  VCC
+
+/WR = E*/RWB
+MREQ =  IOAB + /VPB
+
+/RAME = MREQ*/HA19
+/ROME = MREQ*HA19
+/IOE0 = /MREQ*/A7
+/IOE1 = /MREQ*A7*/A6
+/BRWR = /MREQ*A7*A6*/A5*/A4*/RWB*E
+/BRRD = /MREQ*A7*A6*/A5*/A4*RWB
+/CONE = /MREQ*A7*A6*/A5*A4*/A3
+/CFGE = /MREQ*A7*A6*/A5*A4*A3
+
+DESCRIPTION
+
+Address selection logic for SB6502 Mark III
+IOAB is low iff the A15..8 are all high (addresses FF00..FFFF)
+When VPB is low or IOAB is high, memory is being addressed (MREQ is high)
+When VPB is high and IOAB is low, I/O is being addressed (MREQ is low)
+
+When memory is being addressed, HA19 determines whether the RAM or ROM
+will be selected. When the MMU isn't active, HA19 is driven by A15 and 
+HA18..12 are all driven low. Thus, when the MMU is inactive, the system
+behaves as though it simply has 32K RAM (addresses $0000..7FFF) and 
+32K ROM (addresses $8000..FFFF). When the MMU is active, all of HA19..12
+are instead driven by one of sixteen page registers (selected by  
+the 6502's A15..12).
+
+I/O address range assignments:
+FF00-FF7F -- IOE0
+FF80-FFBF -- IOE1
+FFC0-FFCF -- MMU page registers
+FFD0-FFD7 -- Console ACIA
+FFD8-FFDF -- Config register

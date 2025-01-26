@@ -1,0 +1,28 @@
+GAL16V8 
+6502 Mk3 IVEC
+
+RWB   VPB   A4    A3    A2    A1    S0    S1    S2    GND
+NC    NC    NC    LA1   LA2   LA3   LA4   IVP   RD    VCC
+
+IVP = /VPB*A1*A2
+LA1 = /IVP*A1 + IVP*S0
+LA2 = /IVP*A2 + IVP*S1
+LA3 = /IVP*A3 + IVP*S2
+LA4 = /IVP*A4
+/RD = RWB
+
+DESCRIPTION
+
+Interrupt vector address selection logic.
+
+When VPB is low (indicating that the 6502 is fetching a vector 
+(addresses $FFFA..FFFF) and A1 and A2 are both high (indicating that
+it is the IRQ vector that will be fetched) then IVP is high.
+
+When IVP is low (not pulling the IRQ vector), address lines LA4..1
+simply reflect the 6502 address lines A4..1. 
+
+When IVP is high (pulling the IRQ vector), LA1..3 are set to the 
+encoded output of the priority interrupt encoder (74HC148) and 
+A4 is forced low. This effectively causes the vector fetch to address
+one of eight vectors stored from $FFE0..FFEF.

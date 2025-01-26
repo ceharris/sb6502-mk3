@@ -1,0 +1,10 @@
+*.bin
+*.chp
+*.fus
+*.hex
+*.jed
+*.lst
+*.map
+*.pin
+*.o
+*.sym
