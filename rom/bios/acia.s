@@ -37,9 +37,8 @@ acia_ring:
 	.proc acia_init
 		
 		; initialize the ring buffer
-		lda #0
-		sta acia_head
-		sta acia_tail
+		stz acia_head
+		stz acia_tail
 
 		; initialize the ACIA hardware
 		lda #ACIA_RESET

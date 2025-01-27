@@ -24,8 +24,7 @@
 		sta MMU_BASE,y		
 
 		; put starting address for the slot in w0
-		lda #0
-		sta w0
+		stz w0
 		tya
 		asl
 		asl

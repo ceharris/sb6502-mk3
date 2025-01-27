@@ -42,11 +42,10 @@
 		; down to $E000..EEFF (mapped to RAM bank $F)
 		; we skip page at $FF00 because that's the I/O space
 		
-		lda #0			; base LSB for source and target is zero
-		sta w0
-		sta w1
+		stz w0			; base LSB for source is zero
 		lda #$F0		; base MSB for source
 		sta w0+1		
+		stz w1			; base LSB for target is zero
 		lda #$E0		; base MSB for target
 		sta w1+1	
 		ldx #15			; 1 bank - 1 page = 15 x 256-byte pages
