@@ -75,7 +75,7 @@
 		keyword	">", TOKEN_GREATER
 		keyword	"=", TOKEN_EQUAL
 		keyword	"<"
-.ifdef SBMK2
+.ifdef SBMKN
 		keyword "USR", TOKEN_USR
 .endif
         .segment "VECTORS"
@@ -86,7 +86,7 @@ UNFNC:
 		keyword_addr "ABS", ABS
   .ifdef CONFIG_RAM
 		keyword_addr "USR", IQERR
-  .elseif !.def(SBMK2)
+  .elseif !.def(SBMKN)
 		keyword_addr "USR", USR, TOKEN_USR
   .endif
 		keyword_addr "FRE", FRE

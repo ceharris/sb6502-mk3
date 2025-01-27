@@ -1,5 +1,5 @@
 .if .def(sbmk3) 
-SBMK2 := 1
+SBMKN := 1
 .include "defines_sbmk3.s"
 .endif
 

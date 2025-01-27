@@ -25,7 +25,7 @@ INLIN2:
         cmp     #$0D
         beq     L2453                   ; go if ASCII CR (return)
     .ifndef CONFIG_NO_LINE_EDITING
-       .ifdef SBMK2
+       .ifdef SBMKN
         cmp     #$8
         beq     L2420                   ; go if ASCII BS (backspace)
        .endif
@@ -35,7 +35,7 @@ INLIN2:
         bcs     INLIN2                  ; go if greater than `}` (did we mean to exclude '~'?)
         cmp     #$40                    
         beq     L2423                   ; go if '@'
-      .if .def(SBMK2)
+      .if .def(SBMKN)
         cmp     #$7F ; DEL
       .else
         cmp     #$5F ; _

@@ -186,6 +186,6 @@ CLS:
 .endif
 
 
-.ifdef SBMK2
+.ifdef SBMKN
 .include "sbmk3_extra.s"
 .endif

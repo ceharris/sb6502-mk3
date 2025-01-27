@@ -372,7 +372,7 @@ AMPER:
 ; ----------------------------------------------------------------------------
 NOT_:
         cmp     #TOKEN_NOT
-.ifdef SBMK2
+.ifdef SBMKN
         bne     USR_                    ; check for USR function call
 .else
         bne     L2D74
@@ -393,7 +393,7 @@ EQUOP:
         eor     #$FF
         jmp     GIVAYF
 
-.ifdef SBMK2
+.ifdef SBMKN
 USR_:
         cmp     #TOKEN_USR
         bne     L2D74

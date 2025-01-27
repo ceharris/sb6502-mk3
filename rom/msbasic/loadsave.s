@@ -1,5 +1,5 @@
 .segment "CODE"
-.ifdef SBMK2
+.ifdef SBMKN
 
 LOAD:
 SAVE:

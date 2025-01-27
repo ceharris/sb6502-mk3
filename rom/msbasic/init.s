@@ -279,7 +279,7 @@ L4192:
         lda     TXTTAB
         ldy     TXTTAB+1
         jsr     REASON
-.if .defined(CBM2) | .defined(SBMK2)
+.if .defined(CBM2) | .defined(SBMKN)
         ; display startup message
         lda     #<QT_BASIC
         ldy     #>QT_BASIC
@@ -309,7 +309,7 @@ L4192:
   .if CONFIG_SCRTCH_ORDER = 3
          jsr     SCRTCH                 ; basically same as NEW
   .endif
-.ifdef SBMK2
+.ifdef SBMKN
         ; set up USR vectors
         jsr     USR_INIT
 .endif
@@ -341,7 +341,7 @@ QT_TERMINAL_WIDTH:
 QT_BYTES_FREE:
         .byte   " bytes free", CR, LF, 0
 QT_BASIC:
-  .ifdef SBMK2
+  .ifdef SBMKN
       .byte CR,LF
 	.byte "SB6502 MK3 BASIC V1.2"
   .endif 

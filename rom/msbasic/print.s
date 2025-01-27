@@ -52,7 +52,7 @@ L29B1:
 ; INLIN subroutine (in inline.s) unconditionally jumps here
 ;
 L29B9:
-  .if .def(SBMK2)
+  .if .def(SBMKN)
         lda     #$00
         sta     INPUTBUFFER,x
         ldx     #<(INPUTBUFFER-1)
