@@ -7,7 +7,6 @@
 		.include "registers.h.s"
 		.include "stdio.h.s"
 
-		IPL_SIGNATURE = $FFF0
 
 		.segment "PROGTAB"
 progtab:
@@ -40,6 +39,10 @@ id_message:
 		ldx #$ff		
 		txs			; initialize stack
 
+		; save the current config register
+		lda CONF_REG
+		sta b0			
+
 		; disable the MMU
 		lda CONF_REG		; fetch config register
 		and #<~CONF_MMUE	; clear the MMUE bit
@@ -64,14 +67,12 @@ id_message:
 		sta MMU_SLOTF		; write to MMU bank register for slot E
 
 		; enable the MMU
-		lda CONF_REG		; fetch config register
-		ora #CONF_MMUE		; set the MMUE bit
+		lda #CONF_MMUE		; MMUE bit only
 		sta CONF_REG		; store config register
 		
 		; copy $F000..FEFF (mapped to ROM bank $87)
 		; down to $E000..EEFF (mapped to RAM bank $F)
 		; we skip page at $FF00 because that's the I/O space
-		
 		stz w0			; base LSB for source is zero
 		lda #$F0		; base MSB for source is $F0
 		sta w0+1		
@@ -93,23 +94,13 @@ id_message:
 		; $FFE0..FFFF is memory for vectors; copy them to RAM
 		; Note that w0 and w1 are already positioned correctly
 		ldy #$E0		; interrupt vector memory offset in I/O page
-		ldx #16			; 16 bytes to copy
-@copy_ivec:
+		ldx #32			; 32 bytes to copy
+@copy_vec:
 		lda (w0),y
 		sta (w1),y
 		iny
 		dex
-		bne @copy_ivec
-
-		; We might have state at offsets $F0..F9 in the target RAM so we skip it
-		ldy #$FA		; machine vector memory offset in I/O page
-		ldx #6			; 6 bytes to copy
-@copy_mvec:
-		lda (w0),y
-		sta (w1),y
-		iny
-		dex
-		bne @copy_mvec
+		bne @copy_vec
 
 		; now memory in banks $87 and $F is (mostly) identical
 		; swap out ROM in slot $F for RAM
@@ -124,24 +115,14 @@ id_message:
 		jsr acia_init
 		cli			; allow interrupts
 
-		; check for warm start
-		lda #<PROG_MAGIC
-		cmp IPL_SIGNATURE
-		bne @cold_start
-		lda #>PROG_MAGIC
-		cmp IPL_SIGNATURE+1
-		beq @warm_start
+		; if the MMUE was already enabled, this is a warm start
+		lda b0
+		and #CONF_MMUE
+		bne @warm_start		
 
-	@cold_start:
 		; print startup message to console
 		ldiw0 id_message
 		jsr cputs
-
-		; set the IPL signature
-		lda #<PROG_MAGIC
-		sta IPL_SIGNATURE
-		lda #>PROG_MAGIC
-		sta IPL_SIGNATURE+1
 
 	@warm_start:
 		; go launch the monitor
