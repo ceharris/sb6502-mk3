@@ -104,8 +104,10 @@ progtab:
 		cli			; allow interrupts
 
 		; go launch the monitor
-		lda #1
-		; FALL THROUGH TO pexec
+		lda #0
+		
+		; !!!!! FALLS THROUGH TO pexec !!!!!
+	
 	.endproc
 
 ;-----------------------------------------------------------------------

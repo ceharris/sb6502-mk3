@@ -29,9 +29,9 @@ checksum_msg:
 		.segment "CODE"
 		.word $CE5B
 		.byte 0
-		.word monitor_cold
+		.word monitor
 
-monitor_cold:
+monitor:
 		; print startup message to console
 		ldiw0 id_message
 		jsr J_CPUTS
@@ -77,6 +77,8 @@ command:
 		beq @jump
 		cmp #'K'
 		beq @call
+		cmp #'R'
+		beq @run
 @error:
 		lda #BEL
 		jsr J_CPUTC
@@ -130,6 +132,15 @@ command:
 @jump:
 		jmp (w1)
 
+@run:
+		; need 1 arg
+		lda #1
+		cmp b0
+		bne @error
+		lda w1+1		; MSB of arg must be zero
+		bne @error
+		lda w1			; program number
+		jmp J_PEXEC		; go execute the program
 
 ;-----------------------------------------------------------------------
 ; show_prompt
