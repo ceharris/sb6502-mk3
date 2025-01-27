@@ -30,4 +30,4 @@ RAMSTART2 := USRVEC + 2*NUM_USR_VECS
 ; monitor functions
 MONCOUT	:= J_CPUTC
 MONRDKEY := GETC
-; EXIT_TO_MONITOR := monitor_warm
+EXIT_TO_MONITOR := J_IPL
