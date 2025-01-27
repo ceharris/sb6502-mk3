@@ -13,12 +13,6 @@ input_buf:
 input_buf_end:
 
 		.segment "RODATA"
-id_message:
-		ansi_home
-		ansi_erase_display
-		.byte "SB6502 Mk3 Monitor", LF, LF
-		.byte BEL
-		.byte NUL
 ihex_prompt: 	
 		.byte "<Ctrl-C to stop>", LF, NUL
 syntax_msg:
@@ -32,10 +26,6 @@ checksum_msg:
 		.word monitor
 
 monitor:
-		; print startup message to console
-		ldiw0 id_message
-		jsr J_CPUTS
-
 		ldiw1 0
 
 command:	
