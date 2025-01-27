@@ -3,6 +3,7 @@
 *.fus
 *.hex
 *.jed
+*.lbl
 *.lst
 *.map
 *.pin
