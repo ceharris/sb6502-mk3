@@ -1,26 +1,132 @@
 
 		.include "acia.h.s"
 		.include "ascii.h.s"
+		.include "conf.h.s"
+		.include "exec.h.s"
 		.include "ports.h.s"
 		.include "registers.h.s"
 
-		MAGIC = $CE5B
+		.segment "PROGTAB"
+progtab:
+		; Program 0: Monitor 
+		.byte $E	; slot
+		.byte $80	; bank
+		; Program 1: BASIC
+		.byte $C	; slot
+		.byte $81	; bank
 
-		.export exec
+
+		.segment "CODE"
 
 ;-----------------------------------------------------------------------
-; exec:
-; Executes a program stored in a memory bank.
+; ipl:
+; Initial program load. This routine puts the hardware into a known
+; configuration with the MMU enabled, and then executes the monitor.
 ;
+	.proc ipl
+		sei			; inhibit interrupts
+		cld			; clear decimal mode
+		ldx #$ff		
+		txs			; initialize stack
+
+		; disable the MMU
+		lda CONF_REG		; fetch config register
+		and #<~CONF_MMUE	; clear the MMUE bit
+		sta CONF_REG		; store config register
+
+		; map banks $0..$D into slots $0..$D
+		ldx #14			; map 16 banks
+		ldy #0			; start at slot 0, bank 0
+	@next_bank:
+		tya			; bank number is the slot number
+		sta MMU_BASE,y		; write to MMU bank register for slot (Y)
+		iny			; next strop
+		dex	
+		bne @next_bank		; go if more slots to map
+
+		; map bank $F into slot $E temporarily
+		lda #$F			; bank $F
+		sta MMU_SLOTE		; write to MMU bank register for slot E
+
+		; map bank $87 into slot $F temporarily
+		lda #$87		; bank $87
+		sta MMU_SLOTF		; write to MMU bank register for slot E
+
+		; enable the MMU
+		lda CONF_REG		; fetch config register
+		ora #CONF_MMUE		; set the MMUE bit
+		sta CONF_REG		; store config register
+		
+		; copy $F000..FEFF (mapped to ROM bank $87)
+		; down to $E000..EEFF (mapped to RAM bank $F)
+		; we skip page at $FF00 because that's the I/O space
+		
+		stz w0			; base LSB for source is zero
+		lda #$F0		; base MSB for source is $F0
+		sta w0+1		
+		stz w1			; base LSB for target is zero
+		lda #$E0		; base MSB for target is $E0
+		sta w1+1	
+		ldx #15			; 1 bank - 1 page = 15 x 256-byte pages
+@copy_byte:
+		lda (w0),y		; fetch byte from source
+		sta (w1),y		; store byte to target
+		iny
+		bne @copy_byte		; go if more bytes in page
+
+		inc w0+1		; next page of source
+		inc w1+1		; next page of target
+		dex
+		bne @copy_byte		; go if more pages
+
+		; $FFE0..FFFF is memory for vectors; copy them to RAM
+		; Note that w0 and w1 are already positioned correctly
+		ldy #$E0		; vector memory offset in I/O page
+		ldx #32			; 32 bytes to copy
+@copy_vec:
+		lda (w0),y
+		sta (w1),y
+		iny
+		dex
+		bne @copy_vec
+
+		; now memory in banks $87 and $F is identical
+		; swap out ROM in slot $F for RAM
+		lda #$F			; bank $F
+		sta MMU_SLOTF		; write to MMU bank register for slot $F
+
+		; put RAM in slot $E
+		dec a			; bank $E
+		sta MMU_SLOTE		; write to MMU bank register for slot $E
+
+		; initialize the serial console
+		jsr acia_init
+		cli			; allow interrupts
+
+		; go launch the monitor
+		lda #1
+		; FALL THROUGH TO pexec
+	.endproc
+
+;-----------------------------------------------------------------------
+; pexec:
+; Executes a stored program.
+; 
 ; On entry:
-;	A = initial bank number to map
-;	Y = slot for bank (A)
+;	A = program number (as given in progtab)
 ;
-; On return:
+; On entry to the new program:
 ;	A, Y, X, w0, b0 clobbered
 ;
-	.proc exec
-		; map initial bank into slot
+	.proc pexec
+		; map program number to first slot and bank to map
+		asl			; two bytes per table entry
+		tax			; use as an index
+		lda progtab,x		
+		tay			; Y = first slot number
+		lda progtab+1,x		; A = first bank number
+
+		; map first bank into slot
 		sta MMU_BASE,y		
 
 		; put starting address for the slot in w0
@@ -34,11 +140,11 @@
 
 		; check for magic word
 		ldy #0
-		lda #<MAGIC
+		lda #<PROG_MAGIC
 		cmp (w0),y
 		bne @err_magic
 		iny
-		lda #>MAGIC
+		lda #>PROG_MAGIC
 		cmp (w0),y
 		bne @err_magic
 		iny

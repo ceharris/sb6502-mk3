@@ -1,8 +1,7 @@
 
 
 		.include "acia.h.s"
-		
-		.import ipl
+		.include "exec.h.s"
 
 		.segment "CODE"
 noop_isr:

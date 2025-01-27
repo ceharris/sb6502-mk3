@@ -1,6 +1,8 @@
 	.ifndef EXEC_H
 		EXEC_H = 1
 
-		.global exec
+		.include "prog.h.s"
+		.global ipl
+		.global pexec
 
 	.endif

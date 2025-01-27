@@ -2,8 +2,9 @@
 .SUFFIXES: .bin .lbl .lst .map .o .s .sym
 
 INCLUDES=bios.cfg acia.h.s exec.h.s \
-         ../include/ascii.h.s ../include/conf.h.s ../include/ports.h.s ../include/registers.h.s
-MODULES=ipl.o exec.o acia.o stdio.o vectors.o registers.o jmptab.o
+         ../include/ascii.h.s ../include/conf.h.s ../include/ports.h.s ../include/prog.h.s \
+	 ../include/registers.h.s
+MODULES=exec.o acia.o stdio.o vectors.o registers.o jmptab.o
 
 AS=ca65
 LD=ld65
@@ -19,7 +20,6 @@ clean:
 
 acia.o: acia.s $(INCLUDES)
 exec.o: exec.s $(INCLUDES)
-ipl.o: ipl.s $(INCLUDES)
 jmptab.o: jmptab.s $(INCLUDES)
 registers.o: registers.s $(INCLUDES)
 stdio.o: stdio.s $(INCLUDES)

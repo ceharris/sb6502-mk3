@@ -3,7 +3,8 @@
 		.include "stdio.h.s"
 
 		.segment "JMPTAB"
-		jmp exec
+		jmp ipl
+		jmp pexec
 		jmp cwaitc
 		jmp cgetc
 		jmp cgets
