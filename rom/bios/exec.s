@@ -16,7 +16,9 @@ progtab:
 		; Program 1: BASIC
 		.byte $C	; slot
 		.byte $81	; bank
-
+		; Program 2: Snake
+		.byte $E	; slot
+		.byte $84	; bank
 
 		.segment "RODATA"
 id_message:
