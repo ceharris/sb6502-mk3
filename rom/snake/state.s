@@ -2,6 +2,11 @@
 
 		.segment "ZEROPAGE"
 
+B:
+		.res 1
+W:
+		.res 2
+
 snake_head_x:
 		.res 1
 snake_head_y:
@@ -10,13 +15,23 @@ snake_tail_x:
 		.res 1
 snake_tail_y:
 		.res 1
+next_x:
+		.res 1
+next_y:
+		.res 1
 game_flags:
 		.res 1
 grow_count:
 		.res 1
-food_offset_0:
+snake_head_addr:
 		.res 2
-food_offset_1:
+snake_tail_addr:
+		.res 2
+next_addr:
+		.res 2
+food_addr_0:
+		.res 2
+food_addr_1:
 		.res 2
 food_expires:
 		.res 2

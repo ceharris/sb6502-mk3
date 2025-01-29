@@ -1,5 +1,6 @@
 
 		.include "ascii.h.s"
+		.include "jmptab.h.s"
 		.include "prog.h.s"
 		.include "serial.h.s"
 		.include "ui.h.s"
@@ -10,34 +11,14 @@
 		.word start
 
 start:
-		cli
+		sei
 		jsr ser_init
 
-		jsr ui_reset
-		ldx #10
-		ldy #10
-		jsr ui_put_snake_segment
-		inx
-		jsr ui_put_snake_segment
-		inx
-		jsr ui_put_snake_segment
-		inx
-		jsr ui_put_snake_segment
-		inx
-		jsr ui_put_snake_segment
-		iny
-		jsr ui_put_snake_segment
-		iny
-		jsr ui_put_snake_segment
-		iny
-		jsr ui_put_snake_segment
-		iny
-		jsr ui_put_snake_segment
-
+		jsr ui_clear
 		jsr ser_flush
 
-@done:
-		bra @done
+		jmp J_IPL
+
 	
 
 

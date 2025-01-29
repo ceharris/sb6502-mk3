@@ -3,8 +3,8 @@
 
 IMAGE=snake.bin
 LD_CONFIG=snake.cfg
-INCLUDES=$(LD_CONFIG) serial.h.s state.h.s ui.h.s ../include/ascii.h.s  ../include/ports.h.s
-MODULES=snake.o serial.o ui.o
+INCLUDES=$(LD_CONFIG) model.h.s serial.h.s state.h.s ui.h.s ../include/ascii.h.s  ../include/ports.h.s
+MODULES=snake.o model.o serial.o state.o ui.o
 
 AS=ca65
 ASFLAGS=--cpu 65c02 -I ../include
@@ -15,6 +15,8 @@ all: $(IMAGE)
 
 clean:
 	-rm -f *.bin *.lbl *.lst *.map *.o *.sym
+
+model.o: model.s $(INCLUDES)
 
 snake.o: snake.s $(INCLUDES)
 

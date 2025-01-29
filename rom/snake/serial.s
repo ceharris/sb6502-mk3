@@ -1,5 +1,6 @@
                 
                 .include "ports.h.s"
+                .include "state.h.s"
                 .include "serial.h.s"
 
                 ACIA_RDRF = %00000001
@@ -111,3 +112,78 @@ do_flush:
         .endproc
 
 
+;-----------------------------------------------------------------------
+; ser_puts:
+; Puts a string into the output buffer. The buffer will be flushed as
+; needed to accommodate the length of the string.
+; 
+; On entry:
+;       W = pointer to the null-terminated string
+;
+        .proc ser_puts
+                phy
+                ldy #0
+@next:
+                lda (W),y
+                beq @done
+                jsr ser_putc
+                iny
+                bra @next
+@done:
+                ply
+                rts
+        .endproc
+
+
+;-----------------------------------------------------------------------
+; ser_putsw:
+; Puts a "wide" tring into the output buffer -- i.e. a string in which
+; every pair of characters will have an intervening space. The buffer 
+; will be flushed as needed to accommodate the doubled length of the 
+; string.
+; 
+; On entry:
+;       W = pointer to the null-terminated string
+;
+        .proc ser_putsw
+                phy
+                ldy #0
+                lda (W),y
+                beq @done
+@next:
+                jsr ser_putc
+                iny
+                lda (W),y
+                beq @done
+                lda #' '
+                jsr ser_putc
+                lda (W),y
+                bra @next
+@done:
+                ply
+                rts
+        .endproc
+
+
+;-----------------------------------------------------------------------
+; ser_putsc:
+; Puts a string into the output buffer consisting a repeated character. 
+; The buffer will be flushed as needed to accommodate the length of the 
+; string.
+; 
+; On entry:
+;       A = character to repeat
+;       X = number of times to repeat character (A)
+;
+; On return
+;       B clobbered
+;
+        .proc ser_putsc
+                sta B
+@next:
+                lda B
+                jsr ser_putc
+                dex
+                bne @next
+                rts
+        .endproc

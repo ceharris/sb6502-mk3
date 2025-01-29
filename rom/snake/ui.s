@@ -1,6 +1,9 @@
 
 		.include "serial.h.s"
+		.include "state.h.s"
 		.include "ui.h.s"
+
+		ESC = $1B
 
 	.macro UI_PUT_ANSI_CSI
 		lda #$1B
@@ -48,11 +51,32 @@
 
 
 ;-----------------------------------------------------------------------
-; ui_reset:
+; ui_clear:
 ;
-	.proc ui_reset
-		UI_PUT_ANSI_CSI
-		UI_PUT_ANSI_ED '2'
+	.proc ui_clear
+		; start the status line
+		ldiw _status_line_pre
+		jsr ser_puts
+
+		; display empty status line
+		lda #' '
+		ldx #80
+		jsr ser_putsc
+		
+		; display title label
+		ldiw _title_cup
+		jsr ser_puts
+		ldiw _title_label
+		jsr ser_putsw
+
+		; display score label
+		ldiw _score_label
+		jsr ser_puts
+
+		; finish the status line
+		ldiw _status_line_post
+		jsr ser_puts
+
 		rts
 	.endproc
 
@@ -237,3 +261,18 @@ grid_y_to_row:
 		.byte "22"
 		.byte "23"
 		.byte "24"
+
+_status_line_pre:
+		.byte ESC,"[25;1H", ESC,"[7m",0
+_status_line_post:
+		.byte ESC,"[0m",0
+_title_cup:
+		.byte ESC,"[25;34H",0
+_title_label:
+		.byte "SNAKE!",0
+_game_over_cup:
+		.byte ESC,"[25;32H",0
+_game_over_label:
+		.byte "GAME OVER",0
+_score_label:
+		.byte ESC,"[25;69HScore 0000",0
