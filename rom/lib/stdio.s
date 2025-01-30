@@ -1,8 +1,20 @@
 		.include "ascii.h.s"
-		.include "registers.h.s"
 		.include "stdio.h.s"
 
 		.segment "CODE"
+
+
+;-----------------------------------------------------------------------
+; cwaitc:
+; Waits for an input character from the console.
+;
+; On return:
+;	A = the input character
+;
+cwaitc:
+		jsr acia_getc
+		bcc cwaitc
+		rts
 
 ;-----------------------------------------------------------------------
 ; cputc:
@@ -12,7 +24,7 @@
 ; On entry:
 ;	A = the character to print
 ;
-	.proc cputc
+cputc:
 		cmp #LF
 		beq @newline
 		jsr acia_putc
@@ -23,7 +35,28 @@
 		lda #LF
 		jsr acia_putc
 		rts
-	.endproc		
+
+;-----------------------------------------------------------------------
+; cputcc:
+; Puts a character, but translates control characters to a printable
+; form. Intended mostly for debugging.
+;
+; On entry:
+;	A = character to put
+;
+; On return:
+;	A = A' + $40 if A' < $20 otherwise A is unchanged
+;
+cputcc:
+		cmp #SPC
+		bcs cputc
+		pha
+		lda #'^'
+		jsr cputc
+		pla
+		clc
+		adc #'@'
+		bra cputc
 
 
 ;-----------------------------------------------------------------------
@@ -33,27 +66,21 @@
 ; Rudimentary editing using either ASCII backspace (BS) or delete (DEL) 
 ; is supported. Ctrl-U can be used to clear the entire input and start over.
 ;
-; On entry:
-;       w0 = address of a buffer
-;	b0 = size of the buffer in bytes
-; 
 ; On return:
-; 	buffer at w0 contains a null-terminated string
-;	b0 = number of characters placed into the buffer 
-;            (less the null-terminator)
 ;	A = input character that terminated input, ASCII CR or CTRL_C
+;	(STDIO_W0) = pointer to the input string
+;	(STDIO_B0) = the number of chracters input less the terminator
 ;
-	.proc cgets
-		; preserve registers
+cgets:
 		phx
 		phy
 
 		ldy #0			; Y counts number of chars input
-		ldx b0			; X counts the buffer space remaining
+		ldx #STDIO_BUF_LEN - 1  ; X counts the buffer space remaining
 @next_char:
 		jsr acia_getc		; get a character if available
 		bcc @next_char		; keep trying if none available
-		sta b0			; preserve input character
+		sta STDIO_BUF_ADDR,y	; store the input character
 		cmp #BS			; is it Backspace?
 		beq @delete_char
 		cmp #DEL		; is it Delete?
@@ -68,15 +95,13 @@
 		bcc @next_char
 		cmp #DEL		; is it outside of ASCII range?
 		bcs @next_char
-		tax			; A = remaining buffer space			
-		dec a			; leave room for null terminator
-		bne @store_char		; if there's room, store input char
+		txa			; A = remaining buffer space
+		bne @store_char		; if there's room, keep it
 		lda #BEL		; ring the bell
 		jsr acia_putc		
 		bra @next_char
 @store_char:
-		lda b0			; recover input character
-		sta (w0),y		; store in caller's buffer
+		lda STDIO_BUF_ADDR,y	; recover input character
 		dex			; --buffer space remaining
 		iny			; ++number of chars input
 		jsr acia_putc		; echo the input character
@@ -104,37 +129,44 @@
 		jsr acia_putc		; move cursor backward
 		rts
 @done:
-		pha			; preserve terminating char
-		lda #0			
-		sta (w0),y		; null-terminate the input string
-		sty b0			; save number of characters input
-		pla
+		sty STDIO_B0		; save the number of characters input
+		tax			; save the char that ended input
+		
+		; null-terminate the input string
+		lda #0
+		sta STDIO_BUF_ADDR,y	
+
+		; put the input buffer address into STDIO_W0
+		lda #<STDIO_BUF_ADDR
+		sta STDIO_W0
+		lda #>STDIO_BUF_ADDR
+		sta STDIO_W0+1
+	
+		txa			; recover the char that ended input
 		ply
 		plx
 		rts
-
-	.endproc
 
 
 ;-----------------------------------------------------------------------
 ; cputs:
 ; Prints a string on the console output. The string must be null
-; terminated and more than 256 characters in length.
+; terminated and no more than 256 characters in length.
 ;
 ; On entry:
-;       w0 = pointer to a null-terminated string
+;       AY = pointer to a null-terminated string
 ;
-	.proc cputs
-		phy
+cputs:
+		sty STDIO_W0+0
+		sta STDIO_W0+1
 		ldy #0
 @next:
-		lda (w0),y
+		lda (STDIO_W0),y
 		beq @done
 		jsr cputc
 		iny
 		bne @next
 @done:
-		ply
+		ldy STDIO_W0+0
+		lda STDIO_W0+1
 		rts
-	.endproc
-

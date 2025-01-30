@@ -8,5 +8,5 @@
 		.segment "SNAKE"
 		.incbin "snake/snake.bin"
 
-		.segment "BIOS"
-		.incbin "bios/bios.bin"
+		.segment "IPL"
+		.incbin "ipl/ipl.bin"

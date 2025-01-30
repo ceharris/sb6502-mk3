@@ -1,4 +1,4 @@
-.include "jmptab.h.s"
+.include "stdio.h.s"
 
 ; configuration
 CONFIG_2C := 1
@@ -28,6 +28,6 @@ USRVEC := $0300
 RAMSTART2 := USRVEC + 2*NUM_USR_VECS
 
 ; monitor functions
-MONCOUT	:= J_CPUTC
+MONCOUT	:= cputc
 MONRDKEY := GETC
-EXIT_TO_MONITOR := J_IPL
+;EXIT_TO_MONITOR := J_IPL

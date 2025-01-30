@@ -1,11 +1,17 @@
 		.include "ascii.h.s"
 		.include "ansi.h.s"
-		.include "jmptab.h.s"
+		.include "prog.h.s"
 		.include "registers.h.s"
+		.include "stdio.h.s"
 
 
 		PARAGRAPH_SIZE = 16
 		INPUT_BUF_SIZE = 64
+
+		.segment "MAGIC"
+		.word PROG_MAGIC
+		.byte 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, $A, $B, $C, $D, $E, $80
+		.word monitor
 
 		.segment "BSS"
 input_buf:	
@@ -20,27 +26,23 @@ syntax_msg:
 checksum_msg:
 		.byte "bad checksum", LF, BEL, NUL
 
-		.segment "CODE"
-		.word $CE5B
-		.byte 0
-		.word monitor
 
 monitor:
+		jsr cinit
+		cli
 		ldiw1 0
-
 command:	
 		jsr show_prompt	
-		ldib0 INPUT_BUF_SIZE
-		ldiw0 input_buf
-		jsr J_CGETS
+		ldiw0 STDIO_BUF_ADDR+1
+		jsr cgets
 		pha			; preserve input terminator
 		lda #LF		
-		jsr J_CPUTC		; start a new line
+		jsr cputc		; start a new line
 		pla			; recover input terminator
 		cmp #CTRL_C		; did input end with Ctrl-C?
 		beq command		; yep... go back to the prompt
 
-		lda b0			; get input length
+		lda STDIO_BUF_ADDR	; get input length
 		beq command		; zero... go back to the prompt
 
 		; handle the input
@@ -67,11 +69,9 @@ command:
 		beq @jump
 		cmp #'K'
 		beq @call
-		cmp #'R'
-		beq @run
 @error:
 		lda #BEL
-		jsr J_CPUTC
+		jsr cputc
 		jmp command
 
 @peek:
@@ -122,16 +122,6 @@ command:
 @jump:
 		jmp (w1)
 
-@run:
-		; need 1 arg
-		lda #1
-		cmp b0
-		bne @error
-		lda w1+1		; MSB of arg must be zero
-		bne @error
-		lda w1			; program number
-		jmp J_PEXEC		; go execute the program
-
 
 ;-----------------------------------------------------------------------
 ; show_prompt
@@ -144,9 +134,9 @@ command:
 		lda w2
 		jsr phex8
 		lda #'>'
-		jsr J_CPUTC
+		jsr cputc
 		lda #SPC
-		jsr J_CPUTC
+		jsr cputc
 		rts
 	.endproc
 
@@ -305,7 +295,7 @@ fill_again:
 		
 		; output colon delimiter
 		lda #':'			
-		jsr J_CPUTC			
+		jsr cputc			
 
 		phw0			; preserve current address on stack
 		ldx #PARAGRAPH_SIZE	; paragraph byte counter
@@ -313,7 +303,7 @@ fill_again:
 @put_next_hex:
 		; precede each byte with a space
 		lda #SPC			
-		jsr J_CPUTC	
+		jsr cputc	
 
 		; do we need to skip this byte?
 		jsr hex_check_skip
@@ -321,8 +311,8 @@ fill_again:
 		
 		; skip current byte
 		lda #SPC
-		jsr J_CPUTC
-		jsr J_CPUTC
+		jsr cputc
+		jsr cputc
 		bra @next_hex
 
 		; output this byte
@@ -339,8 +329,8 @@ fill_again:
 
 		; output two spaces before ASCII representation
 		lda #SPC
-		jsr J_CPUTC
-		jsr J_CPUTC
+		jsr cputc
+		jsr cputc
 
 		plw0			; recover current address
 		ldx #PARAGRAPH_SIZE	; paragraph byte counter
@@ -352,7 +342,7 @@ fill_again:
 
 		; skip this byte
 		lda #SPC
-		jsr J_CPUTC
+		jsr cputc
 		bra @next_asc
 
 		; output this byte
@@ -367,7 +357,7 @@ fill_again:
 		jsr hex_next
 		bcc @put_next_asc
 		lda #LF
-		jsr J_CPUTC
+		jsr cputc
 
 		; are we done?
 		phw0
@@ -379,7 +369,7 @@ fill_again:
 
 @check_break:
 		; was Ctrl-C pressed?
-		jsr J_CGETC
+		jsr cgetc
 		bcc @next_paragraph
 		cmp #CTRL_C
 		bne @next_paragraph
@@ -437,7 +427,7 @@ fill_again:
 		
 		; output extra space to separate paragraph 2 groups of 8
 		lda #SPC			
-		jsr J_CPUTC
+		jsr cputc
 
 @not_paragraph_end:
 		clc
@@ -492,17 +482,15 @@ fill_again:
 ;
 ;
 	.proc ihex_load
-		ldiw0 ihex_prompt
-		jsr J_CPUTS
-
-		ldib0 INPUT_BUF_SIZE
-		ldiw0 input_buf
+		ldy #<ihex_prompt
+		lda #>ihex_prompt
+		jsr cputs
 @next_rec:
-		ldy #0
-		jsr J_CGETS
+		ldiw0 STDIO_BUF_ADDR+1
+		jsr cgets
 		pha			; preserve input terminator
 		lda #LF		
-		jsr J_CPUTC		; output newline
+		jsr cputc		; output newline
 		pla
 		cmp #CTRL_C		; terminated by Ctrl-C?
 		bne @find_rec
@@ -575,12 +563,14 @@ fill_again:
 		jmp @next_rec
 
 @checksum_error:
-		ldiw0 checksum_msg
+		ldy #<checksum_msg
+		lda #>checksum_msg
 		bra @error
 @syntax_error:
-		ldiw0 syntax_msg
+		ldy #<syntax_msg
+		lda #>syntax_msg
 @error:
-		jsr J_CPUTS
+		jsr cputs
 		rts
 
 @read_byte:
@@ -664,7 +654,7 @@ fill_again:
 ; Converts a hexadecimal digit to a 4-bit binary value.
 ;
 ; On entry:
-;	A = ASCII character in ['0'..'9'] | ['A'..'F'] | ['a'..'b']
+;	A = ASCII character in ['0'..'9'] | ['A'..'F'] | ['a'..'f']
 ;
 ; On return:
 ;	A = converted value in range [0..15]
@@ -752,7 +742,7 @@ fill_again:
 		clc
 		adc #7 + $20		; A now in ['a'..'f']
 @no_adjust:
-		jsr J_CPUTC		; display hex digit
+		jsr cputc		; display hex digit
 		rts
 	.endproc
 
@@ -769,11 +759,11 @@ fill_again:
 		cmp #DEL
 		bcs @put_dot
 		; it's an ordinary printable ASCII character
-		jsr J_CPUTC
+		jsr cputc
 		rts
 @put_dot:
 		; display a dot instead of the actual value
 		lda #'.'
-		jsr J_CPUTC
+		jsr cputc
 		rts
 	.endproc

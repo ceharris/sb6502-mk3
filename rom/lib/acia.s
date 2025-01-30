@@ -1,6 +1,29 @@
 
-		.include "ports.h.s"
 		.include "acia.h.s"
+		.include "ports.h.s"
+
+; If ACIA_ISR_INCLUDED is non-zero, the library will include the ISR function.
+; ACIA_ISR_INCLUDED = 0
+
+	.ifndef ACIA_ISR_INCLUDED
+		ACIA_ISR_INCLUDED := 0
+	.endif
+
+; When the ISR is included, these variables are used to specify the location
+; of the ring buffer and assocaited pointers. The ring buffer is assumed to be 
+; 256 bytes in length.
+        .ifdef ACIA_ISR_INCLUDED
+        .ifndef ACIA_RING
+                ACIA_RING = $200        ; address of the ring buffer
+        .endif
+        .ifndef ACIA_HEAD
+                ACIA_HEAD = $fe	        ; address of the head index pointer
+        .endif
+        .ifndef ACIA_TAIL
+                ACIA_TAIL = $ff		; address of the tail index pointer
+        .endif
+        .endif
+
 
                 ACIA_TDRE =  %00000010
                 ACIA_DIV16 = %00000001
@@ -10,44 +33,37 @@
 
                 ACIA_NOT_RTS = %01000000
 
+.if !ACIA_ISR_INCLUDED
+                ACIA_CONFIG = ACIA_DIV16 | ACIA_8N1
+.else
                 ACIA_CONFIG = ACIA_DIV16 | ACIA_8N1 | ACIA_RIE
-
-		ACIA_RING_SIZE = $0100
-
+		ACIA_RING_SIZE = $0100          ; changing this alone won't be sufficient
                 ACIA_HIGH_WATER = ACIA_RING_SIZE - 16
                 ACIA_LOW_WATER = 8
+.endif
 
-		.segment "ZEROPAGE"
-acia_head:
-		.res 1
-acia_tail:	
-		.res 1
-
-		.segment "ACIA"
-acia_ring:
-		.res ACIA_RING_SIZE
 
 		.segment "CODE"
 
 
 ;-----------------------------------------------------------------------
 ; acia_init:
-; Initializes the ACIA hardware and ring buffer for input.
+; Initializes the ACIA hardware and (optional) ring buffer.
 ;
-	.proc acia_init
-		
+acia_init:	
+        .if ACIA_ISR_INCLUDED
 		; initialize the ring buffer
-		stz acia_head
-		stz acia_tail
-
-		; initialize the ACIA hardware
+		stz ACIA_HEAD
+		stz ACIA_TAIL
+        .endif
+		
+                ; initialize the ACIA hardware
 		lda #ACIA_RESET
 		sta ACIA_CTRL
 		lda #ACIA_CONFIG
 		sta ACIA_CTRL
 
 		rts
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -57,7 +73,7 @@ acia_ring:
 ; On entry:
 ;       A = the character to send
 ;
-        .proc acia_putc
+acia_putc:
                 pha                     ; save the character to send
 @await_tdre:
                 lda ACIA_CTRL           ; fetch status register
@@ -66,7 +82,6 @@ acia_ring:
                 pla                     ; recover character to send
                 sta ACIA_DATA           ; write the character
                 rts
-        .endproc
 
 
 ;-----------------------------------------------------------------------
@@ -78,10 +93,18 @@ acia_ring:
 ;       carry set => A is the next input character
 ;       carry clear => no character is available (A clobbered)
 ;
-        .proc acia_getc
+acia_getc:        
+        .if !ACIA_ISR_INCLUDED
+                lda ACIA_CTRL
+                ror                     ; put RDRF flag into carry
+                bcc @none               ; go if no character waiting
+                lda ACIA_DATA           ; read the character
+@none:
+                rts
+        .else
                 sei                     ; disable interrupts
-                lda acia_head           ; get head index
-                cmp acia_tail           ; compare to tail index
+                lda ACIA_HEAD           ; get head index
+                cmp ACIA_TAIL           ; compare to tail index
                 bne @char_waiting       ; go if at least one character
                 clc                     ; indicate none available
                 cli                     ; enable interrupts
@@ -89,16 +112,16 @@ acia_ring:
 @char_waiting:
                 phx
                 tax                     ; X = head index
-                lda acia_ring,x         ; fetch next character fron ring
+                lda ACIA_RING,x         ; fetch next character fron ring
                 inx                     ; next head index
-                stx acia_head           ; store new head index
+                stx ACIA_HEAD           ; store new head index
                 plx
                 pha                     ; preserve input character
 
                 ; how many characters are in the ring?
                 sec
-                lda acia_tail
-                sbc acia_head
+                lda ACIA_TAIL
+                sbc ACIA_HEAD
 
                 cmp #ACIA_LOW_WATER     ; at the low water mark?
                 bne @no_rts_change      ; nope
@@ -111,29 +134,16 @@ acia_ring:
                 pla                     ; recover input character
                 sec                     ; indicate character available
                 rts
-        .endproc
-
-
-;-----------------------------------------------------------------------
-; acia_waitc:
-; Reads the next input character from the console serial port. Waits
-; until a character is available.
-;
-; On return:
-;       A is the input character
-;
-        .proc acia_waitc
-                jsr acia_getc
-                bcc acia_waitc          ; keep waiting if none available
-                rts
-        .endproc
+        .endif
 
 
 ;-----------------------------------------------------------------------
 ; acia_isr:
 ; Handle the interrupt request for the ACIA.
 ;
-        .proc acia_isr
+        .if ACIA_ISR_INCLUDED
+
+acia_isr:
                 pha
 @next_char:
                 lda ACIA_CTRL           ; fetch status register
@@ -143,17 +153,17 @@ acia_ring:
                 rti
 @read_char:
                 phx
-                ldx acia_tail           ; fetch tail index for ring buffer
+                ldx ACIA_TAIL           ; fetch tail index for ring buffer
                 lda ACIA_DATA           ; fetch the input character
-                sta acia_ring,x         ; store input character in the ring
+                sta ACIA_RING,x         ; store input character in the ring
                 inx                     ; next ring index
-                stx acia_tail           ; store the new tail index
+                stx ACIA_TAIL           ; store the new tail index
                 plx
 
                 ; how many characters are in the ring?
                 sec
-                lda acia_tail
-                sbc acia_head
+                lda ACIA_TAIL
+                sbc ACIA_HEAD
 
                 cmp #ACIA_HIGH_WATER    ; at the high water mark?
                 bne @next_char          ; nope
@@ -163,4 +173,4 @@ acia_ring:
                 sta ACIA_CTRL
                 bra @next_char
         
-	.endproc
+        .endif

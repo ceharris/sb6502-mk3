@@ -1,11 +1,18 @@
 
-		.include "registers.h.s"
+                .include "registers.h.s"
+                .segment "ZEROPAGE"
 
-		; FIXME -- need to figure out how to properly keep these offsets
-		b0 = $2
-		b1 = $3
-		b2 = $4
-		b3 = $5
-		w0 = $6
-		w1 = $8
-		w2 = $A
+                b0:
+                        .res 1
+                b1:
+                        .res 1
+                b2:
+                        .res 1
+                b3:
+                        .res 1
+                w0:
+                        .res 2
+                w1:
+                        .res 2
+                w2:
+                        .res 2

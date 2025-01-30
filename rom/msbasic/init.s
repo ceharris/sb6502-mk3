@@ -1,3 +1,4 @@
+.include "stdio.h.s"
 .segment "INIT"
 .global COLD_START
 
@@ -8,6 +9,9 @@ PR_WRITTEN_BY:
         jsr     STROUT
 
 COLD_START:
+        jsr     cinit
+        cli
+
         ldx     #$FF
         stx     CURLIN+1
   .ifdef CONFIG_NO_INPUTBUFFER_ZP

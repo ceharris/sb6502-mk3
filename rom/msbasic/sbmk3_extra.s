@@ -1,5 +1,6 @@
 
-	.include "jmptab.h.s"
+	.include "prog.h.s"
+	.include "stdio.h.s"
 
 	.setcpu "65c02" 
 	.global GIVAYF
@@ -7,12 +8,8 @@
 	.global COLD_START
 
 	.segment "MAGIC"
-	.word $CE5B
-	.byte 2
-	.byte $D
-	.byte $82
-	.byte $E
-	.byte $83
+	.word PROG_MAGIC
+	.byte 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, $A, $B, $C, $81, $82, $83
 	.word COLD_START
 
 	.segment "EXTRA"
@@ -101,6 +98,29 @@ DOKE:
         rts
 
 GETC:
-	jsr J_CWAITC
-	jsr J_CPUTC
+	jsr cwaitc
+	jsr cputc
 	rts
+
+
+
+		.global acia_isr
+
+		.segment "CODE"
+noop_isr:
+		rti
+	
+		.segment "IRQVECS"
+		.word noop_isr		; IRQ0
+		.word noop_isr		; IRQ1
+		.word noop_isr		; IRQ2
+		.word acia_isr		; IRQ3 (serial console)
+		.word noop_isr		; IRQ4
+		.word noop_isr		; IRQ5
+		.word noop_isr		; IRQ6
+		.word noop_isr		; IRQ7
+
+		.segment "MACHVECS"
+		.word noop_isr
+		.word noop_isr
+		.word noop_isr

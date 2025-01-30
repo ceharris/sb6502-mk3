@@ -1,7 +1,7 @@
-.include "jmptab.h.s"
+.include "stdio.h.s"
 .segment "CODE"
 ISCNTC:
-        jsr     J_CGETC
+        jsr     cgetc
         bcc     RET1
         cmp     #$03
 	bne	RET1
