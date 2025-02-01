@@ -75,8 +75,15 @@ ipl:
 		ldy #<id_message
 		lda #>id_message
 		jsr cputs
+
+		lda CONF_REG
+		lsr			; set carry if CFD0 is high
+		bcc @loop
+		lda progtab+1		; choose loader automatically
+		bra @load
 @loop:
 		jsr prog_select		; allow user to select the program
+@load:
 		jsr prog_load		; map and validate the header
 		bcs @loop		; try again if invalid bank header
 @bootstrap:
