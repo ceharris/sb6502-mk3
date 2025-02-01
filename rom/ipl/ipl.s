@@ -23,13 +23,16 @@
 		.segment "RODATA"
 progtab:
 		.byte 0
-		.byte $80	; 0: Monitor
-		.word monitor_label
+		.byte $86	; 0: S19 Loader
+		.word loader_label
 		.byte 1
-		.byte $81	; 1: Microsoft BASIC
-		.word msbasic_label
+		.byte $80	; 1: Monitor
+		.word monitor_label
 		.byte 2
-		.byte $84	; 2: Snake
+		.byte $81	; 2: Microsoft BASIC
+		.word msbasic_label
+		.byte 3
+		.byte $84	; 3: Snake
 		.word snake_label
 		.byte $FF
 
@@ -40,6 +43,8 @@ id_message:
 err_message:
 		.byte "Invalid program header", LF, NUL
 
+loader_label:
+		.byte "S19 Loader", NUL
 monitor_label:
 		.byte "Monitor", NUL
 msbasic_label:
