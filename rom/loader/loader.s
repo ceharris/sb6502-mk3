@@ -91,6 +91,11 @@ read_record:
 		ldy #<ok_message
 		lda #>ok_message
 		jsr cputs
+@await_cr:
+		jsr cwaitc
+		cmp #CR
+		bne @await_cr
+		jsr cputc
 		lda #LF
 		jsr cputc
 		rts
@@ -312,7 +317,8 @@ bootstrap_fn:
 load_message:
 		.byte "Awaiting S-records", LF, NUL
 ok_message:
-		.byte "Load successful", LF, NUL
+		.byte "Load successful", LF
+		.byte "Press Return to execute...", NUL
 error_label:
 		.byte LF, "ERROR: ", NUL
 err_bad_digit:
