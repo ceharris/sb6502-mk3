@@ -33,7 +33,7 @@ monitor:
 		ldiw1 0
 command:	
 		jsr show_prompt	
-		ldiw0 STDIO_BUF_ADDR+1
+		ldiw0 STDIO_BUF_ADDR
 		jsr cgets
 		pha			; preserve input terminator
 		lda #LF		
@@ -42,7 +42,7 @@ command:
 		cmp #CTRL_C		; did input end with Ctrl-C?
 		beq command		; yep... go back to the prompt
 
-		lda STDIO_BUF_ADDR	; get input length
+		lda STDIO_B0		; get input length
 		beq command		; zero... go back to the prompt
 
 		; handle the input
@@ -54,7 +54,7 @@ command:
 		bne @match_command
 		tw2w1			; if no args, use current in w2
 @match_command:
-		lda (w0),y		; get terminating char
+		lda (STDIO_W0),y	; get terminating char
 		beq @peek
 		cmp #':'
 		beq @poke
@@ -156,7 +156,7 @@ command:
 		sta w1
 		lda b1
 		sta w1+1
-		lda (w0),y		; A = terminating char
+		lda (STDIO_W0),y	; A = terminating char
 		beq @check_range_type
 		jsr is_hex
 		bcc @check_range_type
@@ -206,14 +206,14 @@ command:
 		lda #0
 		sta b0
 		sta b1
-		lda (w0),y		; A = first character
+		lda (STDIO_W0),y	; A = first character
 		jsr is_hex
 		bcs @parse_address
 		rts
 @parse_address:
 		; convert first byte of address
 		jsr hex2bin
-		lda (w0),y		; A = terminating character
+		lda (STDIO_W0),y	; A = terminating character
 		jsr is_hex
 		bcc @done
 		lda b0
@@ -486,8 +486,8 @@ fill_again:
 		lda #>ihex_prompt
 		jsr cputs
 @next_rec:
-		ldiw0 STDIO_BUF_ADDR+1
 		jsr cgets
+		ldy #0			; start at beginning of input
 		pha			; preserve input terminator
 		lda #LF		
 		jsr cputc		; output newline
@@ -496,7 +496,7 @@ fill_again:
 		bne @find_rec
 		rts
 @find_rec:
-		lda (w0),y		; get next input char
+		lda (STDIO_W0),y	; get next input char
 		beq @next_rec		; next record on null terminator
 		iny
 
