@@ -4,6 +4,7 @@
 		.global ser_init
 		.global ser_flush
 		.global ser_putc
+		.global ser_putci
 		.global ser_puts
 		.global ser_putsw
 		.global ser_putsc

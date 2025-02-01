@@ -9,11 +9,10 @@
 ; Resolve the next state of the game model.
 ;
 	.proc next_state
-
-	jsr _next_head_xy
-	stx next_x
-	sty next_y
-	jsr _next_head_addr
+		jsr _next_head_xy
+		stx next_x
+		sty next_y
+		jsr _next_head_addr
 
 	.endproc
 
@@ -68,19 +67,12 @@
 		lsr
 		bcs @axis_vertical
 		lsr
-		bcs @decr_horizontal
-		jsr _incr_horizontal
-		rts
-@decr_horizontal:
-		jsr _decr_horizontal
-		rts
+		bcs _decr_horizontal
+		bcc _incr_horizontal
 @axis_vertical:
 		lsr
-		bcs @decr_vertical
-		jsr _incr_vertical
-		rts
-@decr_vertical:
-		bra _decr_vertical
+		bcs _decr_vertical
+		bcc _incr_vertical
 	.endproc
 
 
@@ -159,7 +151,7 @@
 		bmi @wrap
 		rts
 @wrap:
-		ldy #GRID_COLUMNS-1
+		ldy #GRID_ROWS-1
 		rts	
 	.endproc
 

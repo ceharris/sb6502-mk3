@@ -82,7 +82,8 @@ do_flush:
                 ; zero the tail index pointer
                 stz ser_tail 
 
-                plx                
+                plx
+                ply                
                 rts
 
         .endproc
@@ -103,14 +104,18 @@ do_flush:
                 sta ser_buffer,y
                 iny
                 sty ser_tail
-                bne @done
-                jsr ser_flush::do_flush
-@done:
+                beq ser_flush::do_flush
                 ply
                 rts
 
         .endproc
 
+ser_putci:
+                lda ACIA_CTRL
+                and #ACIA_TDRE
+                beq ser_putci
+                rts
+ 
 
 ;-----------------------------------------------------------------------
 ; ser_puts:

@@ -54,6 +54,10 @@
 ; ui_clear:
 ;
 	.proc ui_clear
+		; clear display
+		ldiw _clear_display
+		jsr ser_puts
+
 		; start the status line
 		ldiw _status_line_pre
 		jsr ser_puts
@@ -262,8 +266,10 @@ grid_y_to_row:
 		.byte "23"
 		.byte "24"
 
+_clear_display:
+		.byte ESC,"[H",ESC,"[J"
 _status_line_pre:
-		.byte ESC,"[25;1H", ESC,"[7m",0
+		.byte ESC,"[25;1H",ESC,"[7m",0
 _status_line_post:
 		.byte ESC,"[0m",0
 _title_cup:
