@@ -347,6 +347,6 @@ QT_BYTES_FREE:
 QT_BASIC:
   .ifdef SBMKN
       .byte CR,LF
-	.byte "SB6502 MK3 BASIC V1.2"
+	.byte "BASIC V1.2"
   .endif 
       .byte   CR, LF, "Copyright (c) 1977 by Microsoft", CR, LF, 0
