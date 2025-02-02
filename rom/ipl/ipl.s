@@ -24,17 +24,20 @@
 		.segment "RODATA"
 progtab:
 		.byte 1
-		.byte $80	; 1: Monitor
-		.word monitor_label
-		.byte 2
 		.byte $81	; 2: Microsoft BASIC
 		.word msbasic_label
+		.byte 2
+		.byte $84	; 2: EhBASIC
+		.word ehbasic_label
 		.byte 3
-		.byte $84	; 3: Snake
-		.word snake_label
-		.byte 4
-		.byte $8A	; 4: Tali Forth 2
+		.byte $8A	; 3: Tali Forth 2
 		.word taliforth_label
+		.byte 4
+		.byte $84	; 4: Snake
+		.word snake_label
+		.byte 9
+		.byte $80	; 9: Monitor
+		.word monitor_label
 		.byte $FF
 
 id_message:
@@ -50,6 +53,8 @@ monitor_label:
 		.byte "Monitor", NUL
 msbasic_label:
 		.byte "Microsoft BASIC", NUL
+ehbasic_label:
+		.byte "EhBASIC", NUL
 snake_label:
 		.byte "Snake", NUL
 taliforth_label:
