@@ -18,7 +18,6 @@ eeprom:	rom.bin
 	$(PU) $(PUFLAGS) -uP -w $<
 clean:
 	make -C ipl clean
-	make -C loader clean
 	make -C monitor clean
 	make -C msbasic clean
 	make -C snake clean
@@ -26,7 +25,6 @@ clean:
 
 rom.bin:
 	make -C ipl all
-	make -C loader all
 	make -C monitor all
 	make -C msbasic all
 	make -C snake all

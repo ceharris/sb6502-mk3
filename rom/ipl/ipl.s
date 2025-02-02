@@ -3,6 +3,7 @@
 		.include "ascii.h.s"
 		.include "conf.h.s"
 		.include "hex.h.s"
+		.include "loader.h.s"
 		.include "prog.h.s"
 		.include "ports.h.s"
 		.include "stdio.h.s"
@@ -16,15 +17,12 @@
 		PROG_SLOT_ADDRESS = PROG_SLOT<<12
 		PROG_HEADER_LENGTH = 2 + 16 + 2		; magic word + 16 slot mappings + entry point address
 
-		BOOTSTRAP_VECTOR = $200
+		BOOTSTRAP_VECTOR = $300
 
 		B = $0
 
 		.segment "RODATA"
 progtab:
-		.byte 0
-		.byte $86	; 0: S19 Loader
-		.word loader_label
 		.byte 1
 		.byte $80	; 1: Monitor
 		.word monitor_label
@@ -37,12 +35,12 @@ progtab:
 		.byte $FF
 
 id_message:
+		ansi_reset
 		ansi_home
 		ansi_erase_display
 		.byte BEL, "SB6502 Mk 3", LF, NUL
 err_message:
 		.byte "Invalid program header", LF, NUL
-
 loader_label:
 		.byte "S19 Loader", NUL
 monitor_label:
@@ -53,7 +51,7 @@ snake_label:
 		.byte "Snake", NUL
 
 prompt:
-		.byte "Enter item number or memory bank address: ", NUL		
+		.byte "Enter item number, memory bank address, or (L)oad: ", NUL		
 
 		.segment "CODE"
 
@@ -78,18 +76,18 @@ ipl:
 
 		lda CONF_REG
 		lsr			; set carry if CFD0 is high
-		bcc @loop
-		lda progtab+1		; choose loader automatically
-		bra @load
-@loop:
+		bcs @load		; use the loader
+@select:
 		jsr prog_select		; allow user to select the program
-@load:
+		bcs @load		; use the loader
 		jsr prog_load		; map and validate the header
-		bcs @loop		; try again if invalid bank header
-@bootstrap:
-		jsr bootstrap_copy	; copy the bootstrap routine to RAM
-		jmp BOOTSTRAP_VECTOR	; bootstrap the selected program
+		bcs @select		; try again if invalid bank header
 
+		; go execute program in selected bank
+		jmp bootstrap
+
+@load:
+		jmp s19_loader		; run the loader
 
 ;-------------------------------------------------------------------
 ; mmu_init:
@@ -180,8 +178,12 @@ prog_select:
 		; parse user input
 		ldy #0			; start at beginning of input string
 @strip:
-		lda (STDIO_W0),y	; get first character
+		lda (STDIO_W0),y	; get character
 		iny
+		cmp #'L'
+		beq @load		; go if (L)oad requested
+		cmp #'l'
+		beq @load		; go if (L)oad requested
 		cmp #SPC
 		beq @strip		; discard whitespace
 		cmp #HT
@@ -222,6 +224,7 @@ prog_select:
 		cmp #'$'
 		bne @find_in_menu
 		txa			; use entered value as bank number
+		clc			; user wants selected bank
 		rts
 
 		; find user's menu choice
@@ -246,6 +249,11 @@ prog_select:
 @found:
 		inx				
 		lda progtab,x		; get bank number from menu entry
+		clc			; user wants the selected bank
+		rts
+
+@load:
+		sec			; user wants the loader
 		rts
 
 ;-----------------------------------------------------------------------
@@ -288,11 +296,39 @@ prog_load:
 
 
 ;-----------------------------------------------------------------------
-; bootstrap_copy:
-; Copies `bootstrap_fn` into RAM slot 0 at the address specified by
-; BOOTSTRAP_VECTOR.
+; bootstrap:
+; Maps the selected program into the processor's address space and then 
+; jumps to the program's entry point.
+; 
+; On entry:
+;	Memory slot at PROG_SLOT is mapped to the first bank of the
+;	selected program. It begins with a header that describes the
+;	memory map desired by the program.
+;		offset $00 = [ 2 bytes] magic number
+;		offset $02 = [ 1 byte ] unused (slot 0 is always mapped to $0)
+;		offset $03 = [15 bytes] bank map table for slots $1..$F
+;		offset $12 = [ 2 bytes] entry point address
+; 
+; DOES NOT RETURN.
 ;
-bootstrap_copy:
+; The approach:
+;	1. Reset stack pointer, disable interrupts, reset ACIA 
+;          hardware.
+;	2. Copy a small bootstrap routine (at bootstrap_fn) into 
+;	   slot 0 RAM (below $1000) and jump to it.
+;	3. Copy the bank map table and entry point address from 
+;          the program bank header into the zero page at address 0.
+;       4. Map slots $1..F of the address space using the bank map 
+;          table at address 0.
+;       5. Jump to the entry point address from the program header.
+;
+bootstrap:
+		sei			; disable interrupts
+		jsr acia_reset		; reset ACIA hardware
+		ldx #$ff
+		txs			; reset stack
+
+		; copy the bootstrap routine into RAM in slot 0
 		ldx #<BOOTSTRAP_FN_LENGTH
 		ldy #0
 @loop:
@@ -301,46 +337,32 @@ bootstrap_copy:
 		iny
 		dex
 		bne @loop
-		rts
 
+		jmp BOOTSTRAP_VECTOR
 
-;-----------------------------------------------------------------------
-; bootstrap_fn:
-; This relocatable function is copied into RAM in page 0, which will
-; remain resident as the requested system program is mapped into memory.
-; After it is copied, it is executed by jumping to the address defined
-; as BOOTSTRAP_VECTOR.
-;
-; On entry, the header bank for the program must be mapped into
-; the slot identified as PROG_SLOT. It is assumed that the bank header
-; has already been validated.
-;
 bootstrap_fn:
-	; Copy the header (excluding the magic word) into the zero page
-	; This copies the bank mapping table into $0..F, and puts the
-	; entry point address at $10.
-	ldx #PROG_HEADER_LENGTH-2
-	ldy #0
+		; Copy the header (excluding the magic word) into the zero page
+		; This copies the bank mapping table into $0..F, and puts the
+		; entry point address at $10.
+		ldx #PROG_HEADER_LENGTH-2
+		ldy #0
 @copy_next:
-	lda PROG_SLOT_ADDRESS+2,y
-	sta 0,y
-	iny
-	dex
-	bne @copy_next
-	
-	stz 0				; ensure that slot 0 does not change
-
-	; Configure the MMU using the bank mapping table
-	ldx #16				; slot count
-	ldy #0				; slot index
+		lda PROG_SLOT_ADDRESS+2,y
+		sta 0,y
+		iny
+		dex
+		bne @copy_next
+		
+		; Configure the MMU using the bank mapping table
+		ldx #1				; slot index (skip slot 0)
 @config_next:
-	lda 0,y				; fetch bank number from zero page
-	sta MMU_BASE,y			; store bank number in bank register
-	iny
-	dex
-	bne @config_next
+		lda 0,x				; fetch bank number from zero page
+		sta MMU_BASE,x			; store bank number in bank register
+		inx
+		cpx #$10
+		bne @config_next		; go for slots $0..F
 
-	jmp ($10)			; transfer control to the program
+		jmp ($10)			; transfer control to the program
 
 BOOTSTRAP_FN_LENGTH = * - bootstrap_fn
 .if BOOTSTRAP_FN_LENGTH > 256
