@@ -103,12 +103,36 @@ GETC:
 	rts
 
 
+CONF_REG := $FFD8
+CONF_MMUE := $80
+IPL_VECTOR := $F000
+BYE_VECTOR := $F0
 
-		.global acia_isr
+bye_fn:
+                lda CONF_REG
+                and #~CONF_MMUE
+                sta CONF_REG
+                jmp IPL_VECTOR
 
-		.segment "CODE"
+BYE_FN_LENGTH := *-bye_fn
+
+BYE:
+                sei
+                jsr acia_shutdown
+                ldx #BYE_FN_LENGTH
+                ldy #0
+@copy:
+                lda bye_fn,y
+                sta BYE_VECTOR,y
+                iny
+                dex
+                bne @copy
+                jmp BYE_VECTOR
+
 noop_isr:
 		rti
+
+		.global acia_isr
 	
 		.segment "IRQVECS"
 		.word noop_isr		; IRQ0
