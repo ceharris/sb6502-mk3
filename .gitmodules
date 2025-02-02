@@ -1,0 +1,3 @@
+[submodule "rom/taliforth"]
+	path = rom/taliforth
+	url = git@github.com:SamCoVT/TaliForth2.git
