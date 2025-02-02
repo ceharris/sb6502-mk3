@@ -8,6 +8,7 @@
 		.globalzp w0
 		.globalzp w1
 		.globalzp w2
+		.globalzp w3
 
 	.macro ldib0 im8
 		lda #im8

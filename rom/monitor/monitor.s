@@ -1,5 +1,6 @@
 		.include "ascii.h.s"
 		.include "ansi.h.s"
+		.include "hex.h.s"
 		.include "prog.h.s"
 		.include "registers.h.s"
 		.include "stdio.h.s"
@@ -18,15 +19,7 @@ input_buf:
 		.res INPUT_BUF_SIZE
 input_buf_end:
 
-		.segment "RODATA"
-ihex_prompt: 	
-		.byte "<Ctrl-C to stop>", LF, NUL
-syntax_msg:
-		.byte "syntax error", LF, BEL, NUL
-checksum_msg:
-		.byte "bad checksum", LF, BEL, NUL
-
-
+		.segment "CODE"
 monitor:
 		jsr cinit
 		cli
@@ -61,14 +54,14 @@ command:
 		cmp #'*'
 		beq @fill
 		and #$df		; convert to upper case
-		cmp #'H'
-		beq @ihex
 		cmp #'I'
 		beq @ijump
 		cmp #'J'
 		beq @jump
 		cmp #'K'
 		beq @call
+		cmp #'~'
+		jmp bye
 @error:
 		lda #BEL
 		jsr cputc
@@ -84,22 +77,21 @@ command:
 		inc a
 		sta w2+1
 @peek_two_args:
-		jsr hex_peek
+		.import peek
+		jsr peek
 		jmp command
 @poke:
+		.global poke
 		iny			; skip delimiter
-		jsr hex_poke		; poke hex bytes at addr w1
+		jsr poke		; poke hex bytes at addr w1
 		jmp command
 
+		.global fill
 @fill:
 		lda b0
 		dec a			; A = arg count - 1
 		beq @error		; must have two args
-		jsr fill_range
-		jmp command
-
-@ihex:
-		jsr ihex_load
+		jsr fill
 		jmp command
 
 @call:
@@ -226,379 +218,6 @@ command:
 
 
 ;-----------------------------------------------------------------------
-; fill_range:
-; Fills a range of memory using the value stored in the first byte of
-; the range.
-; 
-; On entry:
-;	w1 = start of range (inclusive)
-; 	w2 = end of range (exclusive)
-;
-; On return:
-;	A, w0 clobbered
-;
-	.proc fill_range
-		tw1w0			;put starting address in w0
-		; make the w2 endpoint inclusive by decrementing
-		ldy #0
-		lda w2		
-		sec
-		sbc #1
-		sta w2
-		bcs fill_again
-		dec w2+1
-fill_again:
-		; are we done?
-		phw0
-		sec
-		sbcw2
-		plw0
-		bcc @fill_one
-		rts
-@fill_one:
-		lda (w0),y		; get the byte to use for fill
-		iny
-		sta (w0),y		; fill a byte
-		dey
-		incw0			; next address
-		bra fill_again
-	.endproc
-
-
-;-----------------------------------------------------------------------
-; hex_peek:
-; Produces a hex dump on the console for a range of memory addresses.
-;
-; On entry:
-; 	w1 = starting address (inclusive)
-;	w2 = ending address (exclusive)
-;
-; On return:
-;	w0, b0 clobbered
-; 	A, X, Y clobbered
-;
-	.proc hex_peek
-
-		; put the starting address into w0
-		tw1w0
-
-		; truncate starting address to nearest paragraph
-		lda w0
-		and #256 - PARAGRAPH_SIZE
-		sta w0
-		
-		; We'll use the post-indexed indirect address mode with a
-		; constant offset, since it's the only indirect addressing
-		; mode available for load/store
-		ldy #0
-
-		; The output is organized as 16-byte paragraphs, each preceded
-		; by the paragraph's memory address in hexadecimal
-@put_paragraph:
-		lda w0+1		; MSB of current address
-		jsr phex8		; output as hex
-		lda w0			; LSB of current address
-		jsr phex8		; output as hex
-		
-		; output colon delimiter
-		lda #':'			
-		jsr cputc			
-
-		phw0			; preserve current address on stack
-		ldx #PARAGRAPH_SIZE	; paragraph byte counter
-
-@put_next_hex:
-		; precede each byte with a space
-		lda #SPC			
-		jsr cputc	
-
-		; do we need to skip this byte?
-		jsr hex_check_skip
-		bcc @show_hex
-		
-		; skip current byte
-		lda #SPC
-		jsr cputc
-		jsr cputc
-		bra @next_hex
-
-		; output this byte
-@show_hex:
-		lda (w0),y
-		; FIXME -- if w0 addresses a I/O device, fetching more than once may have
-		; undesirable side effects (e.g. popping the stack on the 
-		; AM9511). We SHOULD save the bytes of this paragraph in RAM and revisit
-		; them from RAM when we print the ASCII equiv
-		jsr phex8
-@next_hex:
-		jsr hex_next
-		bcc @put_next_hex
-
-		; output two spaces before ASCII representation
-		lda #SPC
-		jsr cputc
-		jsr cputc
-
-		plw0			; recover current address
-		ldx #PARAGRAPH_SIZE	; paragraph byte counter
-
-@put_next_asc:
-		; do we need to skip this byte?
-		jsr hex_check_skip
-		bcc @show_asc
-
-		; skip this byte
-		lda #SPC
-		jsr cputc
-		bra @next_asc
-
-		; output this byte
-@show_asc:
-		; FIXME -- if w0 addresses a I/O device, fetching more than once may have
-		; undesirable side effects (e.g. popping the stack on the 
-		; AM9511). We SHOULD save the bytes of this paragraph in RAM and revisit
-		; them from RAM when we print the ASCII equiv
-		lda (w0),y
-		jsr pasc8
-@next_asc:
-		jsr hex_next
-		bcc @put_next_asc
-		lda #LF
-		jsr cputc
-
-		; are we done?
-		phw0
-		sec
-		sbcw2
-		plw0
-		bcc @check_break
-		rts
-
-@check_break:
-		; was Ctrl-C pressed?
-		jsr cgetc
-		bcc @next_paragraph
-		cmp #CTRL_C
-		bne @next_paragraph
-		rts
-@next_paragraph:
-		jmp @put_paragraph
-.endproc
-
-
-;-----------------------------------------------------------------------
-; hex_check_skip:
-; Checks whether current is in the interval [start, end).
-;
-; On entry:
-;	w0 = current address
-;	w1 = start address
-;	w2 = end address
-;
-; On return:
-;	carry clear if and only if current in [start, end)
-;
-	.proc hex_check_skip
-		phw0			; preserve w0
-		sec
-		sbcw1			; subtract starting addres
-		plw0			; recover w0
-		bcs @check_end		; no borrow means start <= current
-		sec			; set carry to indicate skip
-		rts
-@check_end:	
-		phw0			; preserve w0	
-		sec
-		sbcw2			; subtract ending address
-		plw0			; recover w0
-		; carry set if current >= end
-		rts				
-	.endproc
-
-
-;-----------------------------------------------------------------------
-;
-	.proc hex_next
-		incw0			; increment current address
-		dex			; decrement byte counter
-		bne @check_separator
-		sec
-		rts			; return with carry set
-
-@check_separator:
-		txa			; A = number of bytes remaining
-
-		; are we halfway through?
-		cmp #PARAGRAPH_SIZE >> 1
-		bne @not_paragraph_end	; nope
-		
-		; output extra space to separate paragraph 2 groups of 8
-		lda #SPC			
-		jsr cputc
-
-@not_paragraph_end:
-		clc
-		rts
-	.endproc
-
-
-
-	.proc hex_poke
-		phx
-		tya
-		sta b2			; b2 = input offset
-		ldy #0
-		sty b3			; b3 = poke offset
-		ldx #0			; byte counter
-@poke_next:
-		lda b2			; fetch input offset
-		tay			; Y = input offset
-@skip_space:
-		lda (w0),y
-		beq @done
-		jsr is_hex
-		bcs @poke_byte
-		iny
-		cmp #SPC
-		beq @skip_space
-		cmp #TAB
-		beq @skip_space
-		bcc @done
-@poke_byte:		
-		phx
-		jsr hex2bin
-		plx
-		sty b2			; store input offset
-		lda b3			; fetch poke offset
-		tay			; Y = poke offset
-		lda b0			; fetch input byte
-		sta (w1),y		; poke input byte
-		iny			; ++ poke offset
-		sty b3			; store poke offset
-		dex
-		bne @poke_next
-@done:
-		plx
-		rts
-	.endproc
-
-
-;-----------------------------------------------------------------------
-; ihex_load:
-; Loads a sequence of Intel Hex records from standard input.
-;
-;
-	.proc ihex_load
-		ldy #<ihex_prompt
-		lda #>ihex_prompt
-		jsr cputs
-@next_rec:
-		jsr cgets
-		ldy #0			; start at beginning of input
-		pha			; preserve input terminator
-		lda #LF		
-		jsr cputc		; output newline
-		pla
-		cmp #CTRL_C		; terminated by Ctrl-C?
-		bne @find_rec
-		rts
-@find_rec:
-		lda (STDIO_W0),y	; get next input char
-		beq @next_rec		; next record on null terminator
-		iny
-
-		cmp #':'		; start of record?
-		bne @find_rec
-
-		lda #0
-		sta b2			; b2 = initial checksum
-
-		; read record length
-		jsr @read_byte
-		bcc @syntax_error
-		lda b0
-		sta b1			; b1 = record length
-		
-		; read address MSB
-		jsr @read_byte
-		bcc @syntax_error
-		lda b0
-		sta w1+1		; w1 MSB = address MSB
-
-		; read address LSB
-		jsr @read_byte
-		bcc @syntax_error
-		lda b0
-		sta w1			; w1 LSB = address LSB
-
-		; read record type
-		jsr @read_byte
-		bcc @syntax_error
-		lda b0
-		beq @data_rec		; go if type 0 (data record)
-		cmp #1
-		bne @syntax_error	; go if not type 1 (EOF record)
-
-		; end of file record
-@eof_rec:
-		jsr @read_byte		; read checksum
-		lda b2			; A = record checksum
-		bne @checksum_error
-		rts
-		
-@data_rec:
-		lda b1			; A = record length
-		beq @data_rec_end
-		dec b1
-		jsr @read_byte
-		bcc @syntax_error
-		phy
-		ldy #0
-		lda b0
-		sta (w1),y		; store input byte
-		ply
-		; increment w1
-		inc w1
-		bne @data_rec
-		inc w1+1
-		bra @data_rec
-@data_rec_end:
-		jsr @read_byte		; read checksum
-		bcc @syntax_error
-		lda b2			; A = record checksum
-		bne @checksum_error
-		jmp @next_rec
-
-@checksum_error:
-		ldy #<checksum_msg
-		lda #>checksum_msg
-		bra @error
-@syntax_error:
-		ldy #<syntax_msg
-		lda #>syntax_msg
-@error:
-		jsr cputs
-		rts
-
-@read_byte:
-		jsr hex2bin
-		txa			; A = number of digits
-		lsr			; check for even number of digits
-		bcc @update_checksum
-		clc
-		rts
-@update_checksum:
-		lda b2			; A = checksum
-		clc
-		adc b0			; update checksum
-		sta b2			; store new checksum 
-		sec			; carry set indicates success
-		rts
-
-	.endproc
-
-
-;-----------------------------------------------------------------------
 ; hex2bin:
 ; Converts a string to an 8-bit binary value. Conversion stops after
 ; at most two hexadecimal digits have been converted or when a non-
@@ -613,6 +232,7 @@ fill_again:
 ;	Y is the new offset into the input string
 ;	X is the number of digits read
 ;
+		.global hex2bin
 	.proc	hex2bin
 		phy
 		ldx #0			; digit counter
@@ -689,6 +309,7 @@ fill_again:
 ; On return:
 ;	carry set if and only if A contains an ASCII hexadecimal digit
 ;
+		.global is_hex
 	.proc is_hex
 		cmp #'0'
 		bcc @done
@@ -712,65 +333,29 @@ fill_again:
 	.endproc
 
 
-;-----------------------------------------------------------------------
-; phex8:
-; Displays an 8-bit value as two hexadecimal digits
-;
-; On entry:
-;	A contains the value to be displayed
-;
-	.proc phex8
-		pha			; preserve input value
-		; shift upper nibble to lower nibble
-		lsr
-		lsr
-		lsr
-		lsr
-		jsr phex4		; display upper nibble in hex
-		pla			; recover input value
-		jsr phex4		; display lower nibble in hex
-		rts	
-	.endproc
+CONF_REG := $FFD8
+CONF_MMUE := $80
+IPL_VECTOR := $F000
+BYE_VECTOR := $F0
 
+bye_fn:
+                lda CONF_REG
+                and #<~CONF_MMUE
+                sta CONF_REG
+                jmp IPL_VECTOR
 
-;-----------------------------------------------------------------------
-; phex4:
-; Displays a 4-bit value as a hexadecimal digit.
-;
-; On entry:
-; 	Lower 4-bits of A contain the value to be displayed
-;
-	.proc phex4
-		and #$f			; isolate lower nibble
-		clc	
-		adc #'0'		; A now in ['0'..)
-		cmp #'9' + 1
-		bcc @no_adjust		; go if A in ['0'..'9']
-		clc
-		adc #7 + $20		; A now in ['a'..'f']
-@no_adjust:
-		jsr cputc		; display hex digit
-		rts
-	.endproc
+BYE_FN_LENGTH := *-bye_fn
 
+bye:
+                sei
+                jsr acia_shutdown
+                ldx #BYE_FN_LENGTH
+                ldy #0
+@copy:
+                lda bye_fn,y
+                sta BYE_VECTOR,y
+                iny
+                dex
+                bne @copy
+                jmp BYE_VECTOR
 
-;-----------------------------------------------------------------------
-; pasc8:
-; Displays the ASCII representation of an 8-bit value.
-;
-	.proc pasc8
-		; is it an ASCII control character [0..0x31]?
-		cmp #SPC
-		bcc @put_dot
-		; is it in the range [0x7f..0x80]?
-		cmp #DEL
-		bcs @put_dot
-		; it's an ordinary printable ASCII character
-		jsr cputc
-		rts
-@put_dot:
-		; display a dot instead of the actual value
-		lda #'.'
-		jsr cputc
-		rts
-	.endproc
