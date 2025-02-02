@@ -52,7 +52,7 @@
 
 
 		.global acia_init
-		.global acia_reset
+		.global acia_shutdown
 		.global acia_getc
 		.global acia_putc
 		.global acia_isr

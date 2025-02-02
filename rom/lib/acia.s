@@ -25,7 +25,7 @@ acia_init:
 
 		rts
 
-acia_reset:
+acia_shutdown:
                 lda #ACIA_RESET
                 sta ACIA_CTRL
                 rts

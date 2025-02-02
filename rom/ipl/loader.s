@@ -422,7 +422,7 @@ error:
 ;
 bootstrap:
 		sei			; disable interrupts
-		jsr acia_reset		; reset ACIA hardware
+		jsr acia_shutdown	; reset ACIA hardware
 		ldx #$FF
 		txs			; reset stack
 

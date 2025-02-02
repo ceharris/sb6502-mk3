@@ -32,6 +32,9 @@ progtab:
 		.byte 3
 		.byte $84	; 3: Snake
 		.word snake_label
+		.byte 4
+		.byte $8A	; 4: Tali Forth 2
+		.word taliforth_label
 		.byte $FF
 
 id_message:
@@ -49,6 +52,8 @@ msbasic_label:
 		.byte "Microsoft BASIC", NUL
 snake_label:
 		.byte "Snake", NUL
+taliforth_label:
+		.byte "Tali Forth 2", NUL
 
 prompt:
 		.byte "Enter item number, memory bank address, or (L)oad: ", NUL		
@@ -324,7 +329,7 @@ prog_load:
 ;
 bootstrap:
 		sei			; disable interrupts
-		jsr acia_reset		; reset ACIA hardware
+		jsr acia_shutdown	; reset ACIA hardware
 		ldx #$ff
 		txs			; reset stack
 

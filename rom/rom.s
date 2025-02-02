@@ -10,3 +10,6 @@
 
 		.segment "IPL"
 		.incbin "ipl/ipl.bin"
+
+		.segment "TALIFORTH"
+		.incbin "taliforth/taliforth-sbmk3.bin"
