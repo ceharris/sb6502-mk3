@@ -231,15 +231,22 @@ command:
 ; the range.
 ; 
 ; On entry:
-;	w1 = start of range
-; 	w2 = end of range
+;	w1 = start of range (inclusive)
+; 	w2 = end of range (exclusive)
 ;
 ; On return:
 ;	A, w0 clobbered
 ;
 	.proc fill_range
 		tw1w0			;put starting address in w0
+		; make the w2 endpoint inclusive by decrementing
 		ldy #0
+		lda w2		
+		sec
+		sbc #1
+		sta w2
+		bcs fill_again
+		dec w2+1
 fill_again:
 		; are we done?
 		phw0
