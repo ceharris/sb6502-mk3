@@ -97,7 +97,7 @@ ipl:
 		jmp bootstrap
 
 @load:
-		jmp s19_loader		; run the loader
+		jmp loader		; run the loader
 
 ;-------------------------------------------------------------------
 ; mmu_init:

@@ -139,7 +139,7 @@ phex4:
 		cmp #'9' + 1
 		bcc @no_adjust		; go if A in ['0'..'9']
 		clc
-		adc #7 + $20		; A now in ['a'..'f']
+		adc #7			; A now in ['A'..'F']
 @no_adjust:
 		jsr cputc		; display hex digit
 		rts

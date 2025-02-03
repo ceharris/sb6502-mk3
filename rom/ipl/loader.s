@@ -1,5 +1,6 @@
 		.include "ascii.h.s"
 		.include "acia.h.s"
+		.include "hex.h.s"
 		.include "loader.h.s"
 		.include "ports.h.s"
 		.include "prog.h.s"
@@ -7,14 +8,27 @@
 
 		MAX_REC_LENGTH = $80
 		DEFAULT_BASE_BANK = $10
+		DEFAULT_ENTRY_POINT = $0200
 	
+		SREC_START = 'S'
+		SREC_TYPE_HEADER = '0'
+		SREC_TYPE_DATA = '1'
+		SREC_TYPE_COUNT = '5'
+		SREC_TYPE_END = '9'
+
+		IHEX_START = ':'
+		IHEX_TYPE_DATA = 0
+		IHEX_TYPE_END = 1
+		IHEX_TYPE_EXTENDED_ADDR = 4
+		IHEX_TYPE_START_ADDR = 5
+
 		; zero page offsets used for variables
 		BASE_BANK = $0
 		REC_TYPE = $1
 		REC_LENGTH = $2
 		CHECKSUM = $3
 		ADDRESS = $4
-		BOOTSTRAP_VECTOR = $10	; don't want to overwrite ADDRESS
+		ENTRY_POINT = $6
 
 		B = $10			; will overwrite during bootstrap
 
@@ -22,75 +36,45 @@
 		.segment "CODE"
 
 ;-----------------------------------------------------------------------
-; s19_loader:
-; A utility routine that loads a program image from Motorola S-records 
-; (S19 subset) into mapped memory and then executes the program. Assumes
-; that the console ACIA hardware has been initialized for interrupt-
-; driven input as the stdio provider.
+; loader:
+; A utility routine that loads a program image from a supported
+; text format -- either Motorola S-record (S19 subset) or Intel Hex.
+; The format is detected by the first start-of-record character.
 ;
-s19_loader:
+; The program image is mapped into consecutive RAM memory banks 
+; starting at DEFAULT_BASE_BANK (the start of which corresponds to
+; image address 0) and continuing through DEFAULT_BASE_BANK+15 
+; (the end of which corresponds to image address $FFFF).
+; 
+; Assumes that the console ACIA hardware has been initialized for 
+; interrupt-driven input as the stdio provider, and that the sender
+; will respond to RTS/CTS handshake.
+;
+loader:
 		; display the startup message
 		ldy #<load_message
 		lda #>load_message
 		jsr cputs
 
-		; load S-records from stdin
 		lda #DEFAULT_BASE_BANK
-		jsr load_srecs
+		sta BASE_BANK		; set BASE_BANK to default
 
-		; execute the loaded program image
-		jmp bootstrap
+		; default entry point address is zero
+		stz ENTRY_POINT
+		stz ENTRY_POINT+1
 
+		stz REC_TYPE		; zero to allow either start
+		jsr await_start
 
-;-----------------------------------------------------------------------
-; load_srecs:
-; Load Motorola S-records (S19 subset) from stdin into consecutive RAM
-; banks starting with a given bank number.
-;
-; On entry:
-;	A = starting bank number
-;
-; On return:
-;	ADDRESS = entry point address from the terminating S9 record
-;	       
-;	The program image represented in the S-records is laid out 
-;	over the RAM address space starting with the given bank and its
-; 	successors.
-; 
-load_srecs:
-		sta BASE_BANK		; save the specified bank number
-		
-		; await an 'S' at the beginning of a line
-		; indicating a legitimate start of record
-@await_rec:
-		jsr getc
-		cmp #'S'
-		beq @read_rec		; go read the record
-		cmp #CR
-		beq @await_rec		; ignore CR
-		cmp #LF	
-		beq @await_rec		; ignore LF
+		cmp #IHEX_START
+		beq @is_intel
 
-		; discard input until end-of-line
-@discard:
-		jsr getc
-		cmp #CR
-		beq @await_rec		; go if CR
-		cmp #LF
-		beq @await_rec		; go if LF
-		bne @discard		; otherwise discard and try again	
+		jsr load_srec
+		bra @finish_up
+@is_intel:
+		jsr load_ihex
 
-@read_rec:
-		stz CHECKSUM
-		jsr read_rec_type
-		jsr read_rec_length
-		jsr read_addr_and_data
-		jsr read_checksum
-
-		; is it the terminating record?
-		lda REC_TYPE
-		cmp #'9'
-		bne @await_rec		; go get another record
+@finish_up:
 
 		; flush any remaining serial input
 		ldx #$40
@@ -105,39 +89,137 @@ load_srecs:
 		jsr cputc		; send LF after CR
 		bra @flush		; keep flushing
 @delay:
-		; make each loop a bit longer
-		nop
-		nop
-		nop
-		nop
 		iny			; inner counter
 		bne @delay		; keep going until inner is zero
 		dex			; outer counter
 		bne @flush		; keep going until outer is also zero
 
-		; now we're really done
-@done:
+		; print success message
 		ldy #<ok_message
 		lda #>ok_message
 		jsr cputs
 
-		; wait for user to press CR
-@await_cr:
-		jsr cwaitc
-		cmp #CR
-		bne @await_cr		; ignore other keys
-		jsr cputc		; echo CR
-		lda #LF
-		jsr cputc		; send LF after CR
-		rts
+		jsr get_exec_addr	; allow user to choose address
+		jmp bootstrap
 
 
 ;-----------------------------------------------------------------------
-; read_rec_type:
+; load_srec:
+; Load Motorola S-records (S19 subset).
+;
+; On return:
+;	ENTRY_POINT = entry point address from the terminating S9 record
+;	       
+;	The program image represented in the S-records is laid out 
+;	over the mapped address space.
+; 
+load_srec:
+		stz CHECKSUM
+		jsr read_srec_type
+		jsr read_rec_length
+		jsr read_address
+
+		; account for the address and checksum in the length
+		dec REC_LENGTH
+		dec REC_LENGTH
+		dec REC_LENGTH
+
+		; empty record?
+		lda REC_LENGTH
+		beq @finish_rec
+
+		; is it a data record?
+		lda REC_TYPE
+		cmp #SREC_TYPE_DATA
+		bne @not_data
+		jsr read_data
+		bra @finish_rec
+@not_data:
+		jsr skip_data
+@finish_rec:
+		jsr read_srec_checksum
+
+		; is it the terminating record?
+		lda REC_TYPE
+		cmp #SREC_TYPE_END
+		bne @next_rec
+		lda ADDRESS
+		sta ENTRY_POINT
+		lda ADDRESS+1
+		sta ENTRY_POINT+1
+		rts
+@next_rec:
+		lda #SREC_START
+		sta REC_TYPE
+		jsr await_start
+		bra load_srec
+
+
+;-----------------------------------------------------------------------
+; load_ihex:
+; Load Intel Hex records.
+;
+; On return:
+;	ENTRY_POINT = entry point address from a type 5 record if present,
+;                     otherwise the address from the type 1 record
+;	       
+;	The program image represented in the hex is laid out over the 
+;       mapped address space.
+; 
+load_ihex:
+		stz CHECKSUM
+		jsr read_rec_length
+		jsr read_address
+		jsr read_ihex_type
+
+		lda REC_LENGTH
+		beq @finish_rec		; empty record
+
+		lda REC_TYPE
+		cmp #IHEX_TYPE_DATA
+		bne @not_data		; not a data record
+		jsr read_data
+		bra @finish_rec
+@not_data:
+		cmp #IHEX_TYPE_START_ADDR
+		bne @skip_it		; go if not start address record
+		jsr read_ihex_entry_point
+		bra @finish_rec
+@skip_it:
+		jsr skip_data	
+@finish_rec:
+		jsr read_ihex_checksum
+
+		; is it the terminating record?
+		lda REC_TYPE
+		cmp #IHEX_TYPE_END
+		bne @next_rec
+
+		; is there already an entry point address?
+		lda ENTRY_POINT
+		bne @done
+		lda ENTRY_POINT+1
+		bne @done
+		; use the address from the end record as a default
+		lda ADDRESS
+		sta ENTRY_POINT
+		lda ADDRESS+1
+		sta ENTRY_POINT+1
+@done:
+		rts
+@next_rec:
+		lda #IHEX_START
+		sta REC_TYPE
+		jsr await_start
+		bra load_ihex
+
+
+;-----------------------------------------------------------------------
+; read_srec_type:
 ; Read the S-record type digit. Returns if and only if record type 
 ; in {0, 1, 5, 9} (the S19 subset).
 ;
-read_rec_type:
+read_srec_type:
 		jsr read_digit
 		sta REC_TYPE
 		cmp #'0'
@@ -147,6 +229,29 @@ read_rec_type:
 		cmp #'5'
 		beq @done
 		cmp #'9'
+		beq @done
+		ldy #<err_rec_type
+		lda #>err_rec_type
+		jmp error
+@done:
+		rts
+
+
+;-----------------------------------------------------------------------
+; read_ihex_type:
+; Read the hex record type digit. Returns if and only if record type 
+; in {0, 1, 4, 5}.
+;
+read_ihex_type:
+		jsr read_hex8
+		sta REC_TYPE
+		cmp #IHEX_TYPE_DATA
+		beq @done
+		cmp #IHEX_TYPE_END
+		beq @done
+		cmp #IHEX_TYPE_EXTENDED_ADDR
+		beq @done
+		cmp #IHEX_TYPE_START_ADDR
 		beq @done
 		ldy #<err_rec_type
 		lda #>err_rec_type
@@ -177,36 +282,31 @@ read_rec_length:
 
 
 ;-----------------------------------------------------------------------
-; read_addr_and_data:
-; Reads the hexadecimal digits that provide the target address and reads
-; digit pairs representing data bytes until REC_LENGTH reaches zero.
-; If reading a Type 1 record, the data bytes will be transferred to 
-; mapped memory starting at the target address given in the record.
+; read_address
+; Reads the hexadecimal digits that provide the target address.
 ;
-; On return:
-;	REC_LENGTH = 0
-;	mapped memory contains the data from the record
-;
-read_addr_and_data:
+read_address:
 		jsr read_hex8
 		sta ADDRESS+1
 		jsr read_hex8
 		sta ADDRESS+0
-		
-		; account for the address and checksum in the length
-		dec REC_LENGTH
-		dec REC_LENGTH
-		dec REC_LENGTH
+		rts
 
-		; empty record?
-		lda REC_LENGTH
-		beq @done
-
-		; not a data record?
-		lda REC_TYPE
-		cmp #'1'
-		bne @skip
-
+;-----------------------------------------------------------------------
+; read_data:
+; Read the data from the record into mapped memory at the address
+; specified by ADDRESS.
+;
+; On entry:
+; 	REC_LENGTH >= 1
+;	ADDRESS = target address in mapped memory
+;
+; On return:
+;	REC_LENGTH = 0
+;	CHECKSUM incremented with every byte read
+;	mapped memory contains the data from the record
+;
+read_data:
 		; determine target bank and map it and its successor
 		; into slots 1 and 2
 		lda ADDRESS+1
@@ -236,30 +336,78 @@ read_addr_and_data:
 		bne @copy
 		rts
 
-		; read each data byte to update the checksum
-		; (but don't store them anywhere)
-@skip:
+
+;-----------------------------------------------------------------------
+; skip_data:
+; Read and discard the data from the current record.
+;
+; On entry:
+; 	REC_LENGTH >= 1
+;
+; On return:
+;	REC_LENGTH = 0
+;	CHECKSUM incremented with every byte read
+;
+skip_data:
 		jsr read_hex8
 		dec REC_LENGTH
-		bne @skip
-
-@done:
+		bne skip_data
 		rts
 
 
 ;-----------------------------------------------------------------------
-; read_checksum:
+; read_ihex_entry_point:
+; Reads the entry point address from the data field of an Intel type 5
+; record.
+;
+; On return:
+;	ENTRY_POINT = address from the record
+;
+read_ihex_entry_point:
+		; the field contains a 32-bit big endian address
+		; read and ignore the first two bytes
+		jsr read_hex8
+		jsr read_hex8
+		; read and store the 16-bit address
+		jsr read_hex8
+		sta ENTRY_POINT+1
+		jsr read_hex8
+		sta ENTRY_POINT
+		rts
+
+
+;-----------------------------------------------------------------------
+; read_srec_checksum:
 ; Reads the two hexadecimal digits representing the checksum and 
 ; validates that the computed checksum is correct. Returns only if 
 ; the checksum is valid.
 ;
-read_checksum:
+read_srec_checksum:
 		jsr read_hex8		; read a byte from record
 		lda CHECKSUM		; fetch the computed checksum
 		ina			; increment the sum
-		bne @bad_sum		; checksum doesn't match
+		bne bad_checksum	; checksum doesn't match
 		rts
-@bad_sum:
+
+
+;-----------------------------------------------------------------------
+; read_ihex_checksum:
+; Reads the two hexadecimal digits representing the checksum and 
+; validates that the computed checksum is correct. Returns only if 
+; the checksum is valid.
+;
+read_ihex_checksum:
+		jsr read_hex8
+		lda CHECKSUM
+		bne bad_checksum
+		rts
+
+
+;-----------------------------------------------------------------------
+; bad_checksum:
+; Halt with a bad checksum error.
+;
+bad_checksum:
 		ldy #<err_bad_checksum
 		lda #>err_bad_checksum
 		jmp error
@@ -346,6 +494,52 @@ read_digit:
 
 
 ;-----------------------------------------------------------------------
+; await_start:
+; Awaits the start of a record.
+;
+; On entry:
+;	REC_TYPE = SREC_START to look for a Motorola record
+;		   IHEX_START to look for an Intel record
+;		   NULL to look for either record format
+; On return:
+;	A = start of record character
+;	B clobbered
+;
+await_start:
+		jsr getc
+		cmp #SREC_START
+		beq @found_start
+		cmp #IHEX_START
+		beq @found_start
+		cmp #NUL
+		beq await_start		; ignore NUL
+		cmp #CR
+		beq await_start		; ignore CR
+		cmp #LF	
+		beq await_start		; ignore LF
+
+		; discard input until end-of-line
+@discard:
+		jsr getc
+		cmp #CR
+		beq await_start		; go if CR
+		cmp #LF
+		beq await_start		; go if LF
+		bne @discard		; otherwise discard and try again	
+
+		; found a start characger -- which one did we expect?
+@found_start:
+		cmp REC_TYPE
+		beq @done		; found what we expected
+		sta B			; save it
+		lda REC_TYPE		; okay with either of them?
+		bne await_start		; nope... go try again
+		lda B			; recover it
+@done:
+		rts
+
+
+;-----------------------------------------------------------------------
 ; getc:
 ; Waits for a character from stdin and echoes it to stdout.
 ; When CR is received, it is echoed as CR+LF.
@@ -397,11 +591,91 @@ error:
 @halt:
 		bra @halt
 
+;-----------------------------------------------------------------------
+; get_exec_addr:
+; Gets the entry point address for program execution from the user.
+; If an entry point address was included in the image data, it is used
+; here as a default.
+;
+; On entry:
+;	ENTRY_POINT = default entry point address
+;
+get_exec_addr:
+@again:
+		; print first segment of prompt
+		ldy #<addr_prompt1
+		lda #>addr_prompt1
+		jsr cputs
+		; print the default entry point address
+		lda ENTRY_POINT+1
+		jsr phex8
+		lda ENTRY_POINT
+		jsr phex8
+		; print the last segment of prompt
+		ldy #<addr_prompt2
+		lda #>addr_prompt2
+		jsr cputs
+		
+		; get user input
+		jsr cgets
+		cmp #CR			; check terminating char
+		bne @again		; go if not Return key
+		lda #LF
+		jsr cputc		; move to next line
+		
+		; parse user input
+		ldy #0			; start at beginning of input string
+@strip:
+		lda (STDIO_W0),y	; get character
+		iny
+		cmp #SPC
+		beq @strip		; discard whitespace
+		cmp #HT
+		beq @strip		; discard whitespace
+		cmp #'$'		; ignore $ if it appears before address
+		bne @parse
+		iny			; discard '$'
+@parse:
+		dey			; rewind to char that exited strip loop
+		tya			; A = input pointer
+		tax			; X = input pointer
+		jsr hextok		; scan for hexadecimal input
+		cmp #0
+		beq @use_default	; go if no digits entered
+		cmp #4+1
+		bcs @again		; go if more than four digits entered
+		lsr			; set carry if odd count
+		txa			; A = input pointer
+		tay			; Y = input pointer
+		bcc @parse_first_two	; go if even count
+		jsr ihex4		; parse first digit
+		bra @parse_next
+@parse_first_two:
+		jsr ihex8		; parse first two digits
+@parse_next:
+		sta ENTRY_POINT		; assume it's the LSB
+		stz ENTRY_POINT+1	; ... and that the MSB is zero
+		lda (STDIO_W0),y
+		beq @parse_done	 	; only the LSB was given
+		lda ENTRY_POINT
+		sta ENTRY_POINT+1	; first part was actually MSB
+		jsr ihex8		; parse the last two digits
+		sta ENTRY_POINT		; save the LSB
+@parse_done:
+		lda (STDIO_W0),y
+		bne @again 		; go if extraneous input
+@use_default:
+		lda #LF			; go to next line
+		jsr cputc
+		rts		
+
 
 ;-----------------------------------------------------------------------
 ; bootstrap:
 ; Maps the loaded program into the processor's address space and then 
-; jumps to the program's entry point. 
+; jumps to the program's entry point. This is designed to allow a 
+; loaded program to initialize any portion of RAM except for the stack
+; space from $100..1FF as part of the load image.
 ; 
 ; DOES NOT RETURN.
 ;
@@ -409,16 +683,22 @@ error:
 ;	1. Reset stack pointer, disable interrupts, reset ACIA 
 ;          hardware.
 ;	2. Load the first bank number (in BASE_BANK) and entry point
-;	   address (in ADDRESS) into registers temporarily.
+;	   address (in ENTRY_POINT) into registers temporarily.
 ;	3. Map the first bank into slot 0 (replacing the memory used 
 ;	   for the zero page, stack space, etc, up to $3FFF.
-;	4. Restore the values for BASE_BANK and ADDRESS in the newly
-;	   mapped zero page.
+;	4. Save the values for BASE_BANK and ENTRY_POINT on the stack
+;          in the newly mapped memory in slot 0.
 ;	5. Copy a small bootstrap routine (at bootstrap_fn) into the
-;	   zero page and jump to it.
-;	6. The bootstrap routine maps in the other 15 consecutive 
-;	   banks of RAM memory into slots $1..F.
-; 	7. Jump to the entry point address (in ADDRESS).
+;	   base of the stack space.
+;       6. Modify the bootstrap routine (in the stack space) to set
+;          the first bank number and entry point addresses in the
+;          appropriate instructions, using values recoved from the
+;          stack.
+;       7. Jump to the boostrap routine at the base of the stack space.
+;          (In the bootstrap routine)
+;	8. Map in the other 15 consecutive banks of RAM memory into 
+;          slots $1..F.
+; 	7. Jump to the entry point address.
 ;
 bootstrap:
 		sei			; disable interrupts
@@ -426,20 +706,21 @@ bootstrap:
 		ldx #$FF
 		txs			; reset stack
 
-		; copy zero page variables into registers
+		; preserve zero page variables in registers
 		lda BASE_BANK		; A = base bank num
-		ldx ADDRESS		; X = entry point LSB
-		ldy ADDRESS+1		; Y = entry point MSB
+		ldx ENTRY_POINT		; X = entry point LSB
+		ldy ENTRY_POINT+1	; Y = entry point MSB
 
 		; map base bank into slot 0
-		sta MMU_SLOT0		
+		sta MMU_SLOT0		; replaces all RAM from $0000..3FFF
 
-		; restore zero page variables
-		sta BASE_BANK
-		stx ADDRESS
-		sty ADDRESS+1
+		; transfer zero page variables to (new) stack
+		pha			; save base bank number
+		phx			; save entry point LSB
+		phy			; save entry point MSB
 
-		; copy bootstrap function to zero page
+		; copy bootstrap function to base of stack space
+		BOOTSTRAP_VECTOR = $100
 		ldy #0
 		ldx #BOOTSTRAP_LENGTH
 @loop:
@@ -449,38 +730,60 @@ bootstrap:
 		dex
 		bne @loop
 
-		; jump to bootstrap function (in zero page)
+		; modify the bootstrap function to fill in the
+		; base bank number and entry point address
+		ply			; recover entry point MSB
+		sty BOOTSTRAP_VECTOR+BOOTSTRAP_ENTRY_POINT_OFFSET+1
+		plx			; recover entry point LSB
+		stx BOOTSTRAP_VECTOR+BOOTSTRAP_ENTRY_POINT_OFFSET
+		pla			; recover base bank number
+		sta BOOTSTRAP_VECTOR+BOOTSTRAP_BASE_BANK_OFFSET	
+
+		; jump to bootstrap function (at base of stack space)
 		jmp BOOTSTRAP_VECTOR
 
-		; NOTE: this routine executes from the zero page
+;-----------------------------------------------------------------------
+; bootstrap_fn:
+; This small routine is copied into the stack address space
+; (at BOOTSTRAP_VECTOR) and then modified to set the base bank
+; and entry point address before execution.
+;
+		DUMMY = $ffff		
 bootstrap_fn:
 		ldx #1			; X = first slot to map
-@loop:
+bootstrap_fn_loop:
 		txa
 		clc
-		adc BASE_BANK		; A = bank to map
+		adc #<DUMMY		; A = bank to map
+		BOOTSTRAP_BASE_BANK_OFFSET = *-bootstrap_fn-1
+
 		sta MMU_BASE,x		; map bank A into slot X 
 		inx			; next slot
 		cpx #$10
-		bne @loop		; loop until all slots mapped
+		bne bootstrap_fn_loop	; loop until all slots mapped
 
 		; start program at entry point address
-		jmp (ADDRESS)
+		jmp DUMMY
+		BOOTSTRAP_ENTRY_POINT_OFFSET = *-bootstrap_fn-2
 
 		; compute length of the bootstrap routine
 		BOOTSTRAP_LENGTH = *-bootstrap_fn
+
 		; sanity check
-	.if BOOTSTRAP_LENGTH > $100 - BOOTSTRAP_VECTOR
+	.if BOOTSTRAP_LENGTH > $100-$10
 		.error "bootstrap function is too big"
 	.endif
 
 
 		.segment "RODATA"
 load_message:
-		.byte "S19 Loader Ready", LF, NUL
+		.byte "S19/IHEX Loader Ready", LF, NUL
 ok_message:
-		.byte "Load successful", LF
-		.byte "Press Return to execute...", NUL
+		.byte "Load successful", LF, NUL
+addr_prompt1:
+		.byte "Execute at [", NUL
+addr_prompt2:
+		.byte "]: ", NUL
 error_label:
 		.byte LF, "ERROR: ", NUL
 err_bad_digit:
