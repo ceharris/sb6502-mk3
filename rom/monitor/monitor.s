@@ -334,21 +334,28 @@ command:
 
 
 CONF_REG := $FFD8
+MMU_SLOT0 := $FFC0
 CONF_MMUE := $80
 IPL_VECTOR := $F000
 BYE_VECTOR := $F0
 
 bye_fn:
+		; disable MMU
                 lda CONF_REG
                 and #<~CONF_MMUE
                 sta CONF_REG
+		; jump back to the IPL program
                 jmp IPL_VECTOR
 
 BYE_FN_LENGTH := *-bye_fn
 
 bye:
+		; quiesce the system
                 sei
                 jsr acia_shutdown
+		; put bank 0 in slot zero since we will disable MMU
+		stz MMU_SLOT0
+		; copy bye_fn into the zero page
                 ldx #BYE_FN_LENGTH
                 ldy #0
 @copy:
