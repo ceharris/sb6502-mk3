@@ -1,11 +1,13 @@
 .PHONY: all clean
 .SUFFIXES: .bin .lbl .lst .map .o .s .sym
 
-IMAGE=monitor.bin
-LD_CONFIG=monitor.cfg
-S19_IMAGE=monitor.s19
-S19_LOAD=0xF000
-S19_START=0xF014
+EXECUTABLE=monitor
+LOAD_OFFSET=0xF000
+EXECUTION_START=0xF014
+LD_CONFIG=$(EXECUTABLE).cfg
+BIN_IMAGE=$(EXECUTABLE).bin
+S19_IMAGE=$(EXECUTABLE).s19
+HEX_IMAGE=$(EXECUTABLE).hex
 
 INCLUDES=$(LD_CONFIG) \
         ../include/ascii.h.s  \
@@ -25,7 +27,7 @@ LD=ld65
 ASFLAGS=--cpu 65c02 -I ../include -DACIA_ISR_INCLUDED=1
 LDFLAGS=--config $(LD_CONFIG)
 
-all: $(S19_IMAGE)
+all: $(S19_IMAGE) $(HEX_IMAGE)
 
 clean:
 	-rm -f *.bin *.lbl *.lst *.map *.o *.sym
@@ -40,10 +42,15 @@ registers.o: registers.s $(INCLUDES)
 stdio.o: ../lib/stdio.s $(INCLUDES)
 vectors.o: vectors.s $(INCLUDES)
 
-$(S19_IMAGE): $(IMAGE)
-	srec_cat $< -Binary -Offset $(S19_LOAD) -Output -Motorola -Execution_Start_Address=$(S19_START) >$@
+$(S19_IMAGE): $(BIN_IMAGE)
+	srec_cat $< -Binary -Offset $(LOAD_OFFSET) -Output -Motorola \
+	    -execution-start-address=$(EXECUTION_START) >$@
 
-$(IMAGE): $(MODULES)
+$(HEX_IMAGE): $(BIN_IMAGE)
+	srec_cat $< -Binary -Offset $(LOAD_OFFSET) -Output -Intel \
+	    -execution-start-address=$(EXECUTION_START) >$@
+
+$(BIN_IMAGE): $(MODULES)
 	$(LD) $(LDFLAGS) $^ -o $@ -m $*.map -Ln $*.lbl
 
 %.o: */%.s
