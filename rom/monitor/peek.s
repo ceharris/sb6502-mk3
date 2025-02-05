@@ -12,6 +12,7 @@ _peek_buf:
 		.res 16
 
 		.segment "CODE"
+
 ;-----------------------------------------------------------------------
 ; peek:
 ; Peek at memory using a typical hexadecimal dump output.
@@ -19,7 +20,7 @@ _peek_buf:
 ;	w1 = pointer to start of memory range (inclusive)
 ;	w2 = pointer to end of memory range (exclusive)
 ;
-		.export peek
+		.global peek
 peek:
 		; set w0 to the highest address that is less than or
 		; equal to w1 and is divisble by 16
@@ -223,6 +224,28 @@ _peek_paragraph:
 		rts
 
 ;-----------------------------------------------------------------------
+; peek_one:
+; Peek at a single address. The intended use case for this is peeking
+; at an I/O device.
+;
+; On entry:
+;	w1 = pointer to the memory location to peek
+;
+		.global peek_one
+peek_one:
+		lda (w1)		; fetch the byte to peek
+		tax			; preserve it so we only fetch once
+		jsr phex8		; show the hexdecimal value
+		lda #SPC
+		jsr cputc		; print a space
+		txa			; recover the fetched byte
+		jsr _pasc8		; show the ASCII value
+		lda #LF
+		jsr cputc		; print a newline
+		rts
+
+
+;-----------------------------------------------------------------------
 ; _pasc8:
 ; Displays the ASCII representation of an 8-bit value.
 ;
@@ -241,3 +264,4 @@ _pasc8:
 		lda #'.'
 		jsr cputc
 		rts
+

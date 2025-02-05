@@ -19,7 +19,7 @@ INCLUDES=$(LD_CONFIG) \
 	../include/stdio.h.s \
 	registers.h.s
 
-MODULES=monitor.o fill.o peek.o poke.o hex.o stdio.o acia.o registers.o vectors.o
+MODULES=monitor.o fill.o peek.o poke.o quit.o hex.o stdio.o acia.o registers.o vectors.o
 
 AS=ca65
 LD=ld65
@@ -38,6 +38,7 @@ hex.o: ../lib/hex.s $(INCLUDES)
 monitor.o: monitor.s $(INCLUDES)
 peek.o: peek.s $(INCLUDES)
 poke.o: poke.s $(INCLUDES)
+quit.o: quit.s $(INCLUDES)
 registers.o: registers.s $(INCLUDES)
 stdio.o: ../lib/stdio.s $(INCLUDES)
 vectors.o: vectors.s $(INCLUDES)

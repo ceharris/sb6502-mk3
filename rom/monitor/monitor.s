@@ -5,6 +5,12 @@
 		.include "registers.h.s"
 		.include "stdio.h.s"
 
+		.global fill
+		.global peek
+		.global peek_one
+		.global poke
+		.global poke_one
+		.global quit
 
 		PARAGRAPH_SIZE = 16
 		INPUT_BUF_SIZE = 64
@@ -51,6 +57,10 @@ command:
 		beq @peek
 		cmp #':'
 		beq @poke
+		cmp #'<'
+		beq @peek_one
+		cmp #'>'
+		beq @poke_one
 		cmp #'*'
 		beq @fill
 		and #$df		; convert to upper case
@@ -60,13 +70,13 @@ command:
 		beq @jump
 		cmp #'K'
 		beq @call
-		cmp #'~'
-		jmp bye
+		cmp #'Q'
+		beq @quit
 @error:
 		lda #BEL
 		jsr cputc
 		jmp command
-
+		
 @peek:
 		lda b0
 		dec a			; A = arg count - 1
@@ -77,16 +87,21 @@ command:
 		inc a
 		sta w2+1
 @peek_two_args:
-		.import peek
 		jsr peek
 		jmp command
+
+@peek_one:
+		jsr peek_one
+		jmp command
+
 @poke:
-		.global poke
-		iny			; skip delimiter
 		jsr poke		; poke hex bytes at addr w1
 		jmp command
 
-		.global fill
+@poke_one:
+		jsr poke_one
+		jmp command
+
 @fill:
 		lda b0
 		dec a			; A = arg count - 1
@@ -114,67 +129,99 @@ command:
 @jump:
 		jmp (w1)
 
+@quit:
+		jmp quit
+
 
 ;-----------------------------------------------------------------------
 ; show_prompt
-; Print the command prompt.
+; Print the command prompt, which displays the default starting address
+; for the next command executed.
 ;
-	.proc show_prompt
+; On entry:
+;	w1 contains the last starting address used in a command
+;
+; On return:
+;	w2 contains the same value as w1
+;
+show_prompt:
 		tw1w2
+		ldx w2
 		lda w2+1
-		jsr phex8
-		lda w2
-		jsr phex8
+		jsr phex16
 		lda #'>'
 		jsr cputc
 		lda #SPC
 		jsr cputc
 		rts
-	.endproc
-
 
 ;-----------------------------------------------------------------------
-; range_arg
-; Get the address range args for a command.
+; range_arg:
+; Get the address range args for a command. An address range can be
+; specified as either lower (inclusive) and upper (exclusive) bounds
+; separated by a hyphen (e.g. 4200-4300) or starting offset and length
+; (e.g. 4200+100). Addresses and lengths are always interpreted as
+; hexadecimal values.
 ;
-	.proc range_arg
-		jsr address_arg
-		bcs @parse_range
+; On entry:
+;	STDIO_W0 is the address of a buffer containing the 
+;           null-terminated input to be parsed for a range argument
+;	Y is the current offset into the buffer
+;
+; On return:
+;	Carry set iff an error was detected in the range specification
+;	A = the number of address arguments found in the input (0..2)
+;	If A > 0:
+;		w1 = the lower bound of the range (inclusive)
+;		w2 = the upper bound of the range (exclusive)
+;	Else:
+;		w1 and w2 are unchanged
+;
+range_arg:
+		jsr address_arg		; get first address arg
+		bcc @parse_range	; go if an address was parsed
 		lda #0			; range has no args
 		clc			; no error
 		rts
 @parse_range:
 		lda b0
-		sta w1
+		sta w1			; save LSB of lower bound
 		lda b1
-		sta w1+1
-		lda (STDIO_W0),y	; A = terminating char
-		beq @check_range_type
-		jsr is_hex
-		bcc @check_range_type
-		; carry set signals range error
+		sta w1+1		; save MSB of lower bound
+		lda (STDIO_W0),y	; A = character after address
+		bne @check_range_type	; go if not end of input
+@one_arg:
+		lda #1			; range has just one arg
+		clc			; no error
 		rts
-			
+
 @check_range_type:
 		cmp #'-'		; is it 'start-end'?
 		beq @range_start_end
 		cmp #'+'		; is it 'start+length'?
 		beq @range_start_length
-		lda #1			; range has one arg
-		clc			; no error
-		rts
+
+		; if it's not a range separator, assume that it
+		; has meaning as a command, so return without 
+		; indicating an error
+		bra @one_arg
+
 @range_start_end:
 		iny			; skip delimiter
 		jsr address_arg
+		bcs @error		; go if no address
 		lda b0
 		sta w2
 		lda b1
 		sta w2+1
 		bra @two_args
+
 @range_start_length:
 		iny			; skip delimiter
-		jsr address_arg
-		; add length to start address to get end address
+		jsr address_arg		; parse an address
+		bcs @error		; go if no address
+
+		; add length in b1b0 to w1 to get upper bound in w2
 		clc
 		lda b0
 		adc w1
@@ -186,183 +233,48 @@ command:
 		lda #2			; range has two args
 		clc			; no error
 		rts
-
-	.endproc
+@error:
+		sec
+		rts
 
 ;-----------------------------------------------------------------------
 ; address_arg:
-; Get the address range args for a command.
-;
-	.proc address_arg
-		; assume MSB will be zero
-		lda #0
-		sta b0
-		sta b1
-		lda (STDIO_W0),y	; A = first character
-		jsr is_hex
-		bcs @parse_address
-		rts
-@parse_address:
-		; convert first byte of address
-		jsr hex2bin
-		lda (STDIO_W0),y	; A = terminating character
-		jsr is_hex
-		bcc @done
-		lda b0
-		sta b1
-		jsr hex2bin
-@done:
-		sec
-		rts
-	.endproc
-
-
-;-----------------------------------------------------------------------
-; hex2bin:
-; Converts a string to an 8-bit binary value. Conversion stops after
-; at most two hexadecimal digits have been converted or when a non-
-; hexadecimal character is encountered in the input.
-;
-; On entry:
-;	w0 points to the null-terminated input string
-;	Y is the current offset into the input string
+; Get an address argument for a command. The address may be either a
+; sequence of ASCII hexadecimal digits or the character '.' to indicate
+; the current address stored in the w1 pointer.
 ; 
 ; On return:
-;	A, b0 = converted value
-;	Y is the new offset into the input string
-;	X is the number of digits read
+;	carry clear if and only if an address was read
 ;
-		.global hex2bin
-	.proc	hex2bin
-		phy
-		ldx #0			; digit counter
-@check_next:
-		lda (w0),y
-		inx
+address_arg:
+		dey			; compensate for first INY below
+@strip:
 		iny
-		jsr is_hex
-		bcs @check_next
+		lda (STDIO_W0),y	; fetch input char
+		cmp #SPC	
+		beq @strip		; skip over spaces
+		cmp #TAB
+		beq @strip		; skip over tabs
+		cmp #'.'
+		bne @check_hex		; not a dot
 
-		ply			; recover input offset
-		lda #0			; default result
-		sta b0			; store result
-		dex			; X = number of hex digits
-		beq @done		; done if no digits found
-
-		txa			; A = digit count
-		lsr			; set carry if odd digit count
-		bcs @odd		; go if odd count
-		; convert upper nibble
-		lda (w0),y		; fetch hex digit
-		iny			; ++ input offset
-		jsr htob4		; convert digit to binary
-		; shift to upper nibble
-		asl
-		asl
-		asl
-		asl
-		and #$f0		; zero lower nibble
-		sta b0			; save it
-		;convert lower nibble
-@odd:
-		lda (w0),Y		; fetch hex digit
-		iny			; ++ input offset
-		jsr htob4		; convert digit to binary
-		ora b0			; merge in upper nibble
-		sta b0
+		; dot (.) means "use current value of w1"
+		iny
+		ldx w1
+		lda w1+1
+		bra @done
+@check_hex:
+		phy			; save input pointer
+		jsr hextok		; scan ahead for hex digits
+		bne @found_hex		; go if we got at least one hex digit
+		ply			; recover input pointer
+		sec			; set carry to indicate no address
+		rts
+@found_hex:
+		ply			; recover input pointer
+		jsr ihex16		; parse the address
 @done:
+		stx b0			; store the LSB
+		sta b1			; store the MSB
+		clc			; clear carry to indicate address read
 		rts
-
-	.endproc
-
-
-;-----------------------------------------------------------------------
-; htob4: 
-; Converts a hexadecimal digit to a 4-bit binary value.
-;
-; On entry:
-;	A = ASCII character in ['0'..'9'] | ['A'..'F'] | ['a'..'f']
-;
-; On return:
-;	A = converted value in range [0..15]
-;
-	.proc htob4
-		cmp #'9'+1
-		bcc @num_digit
-		and #$df		; convert to upper case
-		sec
-		sbc #7			; A now in [$3A..$3F]
-@num_digit:
-		sec
-		sbc #'0'		; A now in [0..15]
-		rts
-	.endproc
-
-
-;-----------------------------------------------------------------------
-; is_hex:
-; Tests whether the character in A is an ASCII hexadecimal digit
-;
-; On entry:
-;	A = character to test
-;
-; On return:
-;	carry set if and only if A contains an ASCII hexadecimal digit
-;
-		.global is_hex
-	.proc is_hex
-		cmp #'0'
-		bcc @done
-		cmp #'9'+1
-		bcc @hex
-		cmp #'A'
-		bcc @done
-		cmp #'F'+1
-		bcc @hex
-		cmp #'a'
-		bcc @done
-		cmp #'f'+1
-		bcc @hex
-@done:
-		clc
-		rts
-@hex:
-		sec
-		rts
-
-	.endproc
-
-
-CONF_REG := $FFD8
-MMU_SLOT0 := $FFC0
-CONF_MMUE := $80
-IPL_VECTOR := $F000
-BYE_VECTOR := $F0
-
-bye_fn:
-		; disable MMU
-                lda CONF_REG
-                and #<~CONF_MMUE
-                sta CONF_REG
-		; jump back to the IPL program
-                jmp IPL_VECTOR
-
-BYE_FN_LENGTH := *-bye_fn
-
-bye:
-		; quiesce the system
-                sei
-                jsr acia_shutdown
-		; put bank 0 in slot zero since we will disable MMU
-		stz MMU_SLOT0
-		; copy bye_fn into the zero page
-                ldx #BYE_FN_LENGTH
-                ldy #0
-@copy:
-                lda bye_fn,y
-                sta BYE_VECTOR,y
-                iny
-                dex
-                bne @copy
-                jmp BYE_VECTOR
-

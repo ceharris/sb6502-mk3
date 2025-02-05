@@ -11,7 +11,11 @@
 	.endif
 
 	.ifndef STDIO_B0
-		STDIO_B0 := $fb			; must be a zero page address
+		STDIO_B0 := $fa			; must be a zero page address
+	.endif
+
+	.ifndef STDIO_B1
+		STDIO_B1 := $fb			; must be a zero page address
 	.endif
 
 	.ifndef STDIO_W0
