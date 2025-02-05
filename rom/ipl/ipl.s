@@ -203,25 +203,18 @@ prog_select:
 		bne @parse
 		iny			; discard '$'
 @parse:
-		; save input pointer in X
 		dey
-		tya
-		tax
+		tya			; A = input pointer
+		tax			; X = input pointer
 		jsr hextok		; scan for hexadecimal input
 		cmp #0
 		beq @select		; go if no digits entered
 		cmp #2+1
 		bcs @select		; go if more than two digits entered
-		lsr			; set carry if one digit
-		; recover input pointer from X
-		txa
-		tay
-		bcc @parse_two		; go if two digits
-		jsr ihex4
-		bra @parse_done
-@parse_two:
-		jsr ihex8
-@parse_done:
+		txa			; A = input pointer
+		tay			; Y = input pointer
+		lda STDIO_B0		; A = number of digits to parse
+		jsr ihex8		; parse hex digits
 		tax			; X = converted input value
 
 		; check for end of input

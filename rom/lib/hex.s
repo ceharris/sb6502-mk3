@@ -68,7 +68,7 @@ ihex16:
 	bcs @is_even		; ... consume just the first four
 	lsr			; set carry if odd number of digits
 	bcc @is_even
-	jsr _ihex4		; convert the first digit
+	jsr ihex4		; convert the first digit
 	bra @is_odd
 @is_even:
 	jsr _ihex8		; convert first two digits
@@ -105,7 +105,7 @@ ihex8:
 	bcs @is_two		; ... consume just the first two
 	lsr			; set carry if one digit
 	bcc @is_two
-	jsr _ihex4		; convert the single digit
+	jsr ihex4		; convert the single digit
 	rts
 @is_two:
 	jsr _ihex8		; convert both digits
@@ -126,14 +126,14 @@ ihex8:
 _ihex8:
 		phx
 		; convert first digit
-		jsr _ihex4
+		jsr ihex4
 		; shift result into upper nibble
 		asl
 		asl
 		asl
 		asl
 		tax			; X = result of first digit
-		jsr _ihex4
+		jsr ihex4
 		; convert second digit
 		dey
 		sta (STDIO_W0),y	; store result of second digit
@@ -144,7 +144,7 @@ _ihex8:
 		rts
 
 ;-----------------------------------------------------------------------
-; _ihex4:
+; ihex4:
 ; Converts a 4-bit hexadecimal input character to its binary equivalent.
 ;
 ; On entry:
@@ -154,7 +154,7 @@ _ihex8:
 ; On return:
 ;	A = converted value
 ;	Y = Y' + 1
-_ihex4:
+ihex4:
 		lda (STDIO_W0),y
 		iny
 		cmp #'9'+1
@@ -198,20 +198,20 @@ phex8:
 		lsr
 		lsr
 		lsr
-		jsr _phex4		; display upper nibble in hex
+		jsr phex4		; display upper nibble in hex
 		pla			; recover input value
-		jsr _phex4		; display lower nibble in hex
+		jsr phex4		; display lower nibble in hex
 		rts	
 
 
 ;-----------------------------------------------------------------------
-; _phex4:
+; phex4:
 ; Displays a 4-bit value as a hexadecimal digit.
 ;
 ; On entry:
 ; 	Lower 4-bits of A contain the value to be displayed
 ;
-_phex4:
+phex4:
 		and #$f			; isolate lower nibble
 		clc	
 		adc #'0'		; A now in ['0'..)

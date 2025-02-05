@@ -607,10 +607,9 @@ get_exec_addr:
 		lda #>addr_prompt1
 		jsr cputs
 		; print the default entry point address
+		ldx ENTRY_POINT
 		lda ENTRY_POINT+1
-		jsr phex8
-		lda ENTRY_POINT
-		jsr phex8
+		jsr phex16
 		; print the last segment of prompt
 		ldy #<addr_prompt2
 		lda #>addr_prompt2
@@ -644,25 +643,14 @@ get_exec_addr:
 		beq @use_default	; go if no digits entered
 		cmp #4+1
 		bcs @again		; go if more than four digits entered
-		lsr			; set carry if odd count
 		txa			; A = input pointer
 		tay			; Y = input pointer
-		bcc @parse_first_two	; go if even count
-		jsr ihex4		; parse first digit
-		bra @parse_next
-@parse_first_two:
-		jsr ihex8		; parse first two digits
-@parse_next:
-		sta ENTRY_POINT		; assume it's the LSB
-		stz ENTRY_POINT+1	; ... and that the MSB is zero
-		lda (STDIO_W0),y
-		beq @parse_done	 	; only the LSB was given
-		lda ENTRY_POINT
-		sta ENTRY_POINT+1	; first part was actually MSB
-		jsr ihex8		; parse the last two digits
-		sta ENTRY_POINT		; save the LSB
+		lda STDIO_B0		; A = number of hex digits to parse
+		jsr ihex16		; parse the address
+		stx ENTRY_POINT		; save entry point LSB
+		sta ENTRY_POINT+1	; save entry point MSB
 @parse_done:
-		lda (STDIO_W0),y
+		lda (STDIO_W0),y	; get next input char
 		bne @again 		; go if extraneous input
 @use_default:
 		lda #LF			; go to next line
