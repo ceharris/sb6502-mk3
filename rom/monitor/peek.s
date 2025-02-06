@@ -102,7 +102,7 @@ peek:
 @not_last:
 		jsr _peek_paragraph
 		jsr _next_paragraph
-		bcc @loop
+		bne @loop
 		rts
 
 _is_first_paragraph:
@@ -113,6 +113,10 @@ _is_first_paragraph:
 		rts
 
 _is_last_paragraph:
+		ldx _paragraph_count
+		lda _paragraph_count+1
+		ldx _paragraph_index
+		lda _paragraph_index+1
 		sec
 		lda _paragraph_count
 		sbc _paragraph_index
@@ -135,20 +139,6 @@ _is_done:
 
 
 _next_paragraph:
-		sec
-		lda _paragraph_count
-		sbc #1
-		sta _paragraph_count
-		lda _paragraph_count+1
-		sbc #0
-		sta _paragraph_count+1
-		lda _paragraph_count
-		bne @update_index
-		lda _paragraph_count+1
-		bne @update_index
-		sec
-		rts
-@update_index:
 		inc _paragraph_index
 		bne @update_w0
 		inc _paragraph_index+1
@@ -157,10 +147,16 @@ _next_paragraph:
 		lda w0
 		adc #$10
 		sta w0
-		bne @done
+		bne @check_end
 		inc w0+1
+@check_end:
+		sec
+		lda _paragraph_count
+		sbc _paragraph_index
+		bne @done
+		lda _paragraph_count+1
+		sbc _paragraph_index+1
 @done:
-		clc
 		rts
 
 _peek_paragraph:
@@ -177,7 +173,7 @@ _peek_paragraph:
 		cpy b0			; compare to begin inset
 		bcc @skip_hex		; skip if before begin inset
 		cpy b1			; compare to end inset
-		bcs @skip_hex		; skip if on/fter end inset
+		bcs @skip_hex		; skip if on/after end inset
 		lda (w0),y		; fetch the byte
 		sta _peek_buf,y		; save in zero page buffer
 		jsr phex8		; print byte in hex
