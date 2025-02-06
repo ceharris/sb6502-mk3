@@ -1,4 +1,5 @@
 .include "stdio.h.s"
+.global soft_reset
 
 ; configuration
 CONFIG_2C := 1
@@ -30,4 +31,4 @@ RAMSTART2 := USRVEC + 2*NUM_USR_VECS
 ; monitor functions
 MONCOUT	:= cputc
 MONRDKEY := GETC
-EXIT_TO_MONITOR := BYE
+EXIT_TO_MONITOR := soft_reset
