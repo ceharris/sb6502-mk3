@@ -26,6 +26,7 @@ input_buf:
 input_buf_end:
 
 		.segment "CODE"
+		.global monitor
 monitor:
 		jsr cinit
 		cli
