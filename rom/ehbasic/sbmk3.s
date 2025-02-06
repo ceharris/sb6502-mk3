@@ -21,6 +21,7 @@ NMI_vec	= IRQ_vec+$0A	; NMI code vector
 
 ; Reset vector points here
 
+	.global RES_vec
 RES_vec
 	CLD				; clear decimal mode
 	LDX	#$FF			; empty stack
@@ -77,32 +78,9 @@ SBCload				        ; load vector for EhBASIC
 SBCsave				        ; save vector for EhBASIC
 	RTS
 
-CONF_REG := $FFD8
-CONF_MMUE := $80
-IPL_VECTOR := $F000
-BYE_VECTOR := $F0
+	.include "reset.s"
 
-bye_fn:
-                lda CONF_REG
-                and #<~CONF_MMUE
-                sta CONF_REG
-                jmp IPL_VECTOR
-
-BYE_FN_LENGTH := *-bye_fn
-
-LAB_EXIT:
-                sei
-                jsr acia_shutdown
-                ldx #BYE_FN_LENGTH
-                ldy #0
-@copy:
-                lda bye_fn,y
-                sta BYE_VECTOR,y
-                iny
-                dex
-                bne @copy
-                jmp BYE_VECTOR
-
+LAB_EXIT := soft_reset
 
 ; vector tables
 
