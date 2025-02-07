@@ -3,6 +3,8 @@
 
 		.include "state.h.s"
 
-		.global next_state
+		.global model_init
+		.global model_key_event
+		.global model_next
 
 	.endif

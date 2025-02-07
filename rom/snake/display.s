@@ -1,12 +1,12 @@
 
+		.include "ascii.h.s"
+		.include "display.h.s"
 		.include "serial.h.s"
 		.include "state.h.s"
-		.include "ui.h.s"
 
-		ESC = $1B
 
 	.macro UI_PUT_ANSI_CSI
-		lda #$1B
+		lda #ESC
 		jsr ser_putc
 		lda #'['
 		jsr ser_putc
@@ -46,9 +46,31 @@
 		jsr ser_putc
 	.endmacro
 
+	.macro UI_HIDE_CURSOR
+		UI_PUT_ANSI_CSI
+		lda #'?'
+		jsr ser_putc
+		lda #'2'
+		jsr ser_putc
+		lda #'5'
+		jsr ser_putc
+		lda #'l'
+		jsr ser_putc
+	.endmacro
+
+	.macro UI_SHOW_CURSOR
+		UI_PUT_ANSI_CSI
+		lda #'?'
+		jsr ser_putc
+		lda #'2'
+		jsr ser_putc
+		lda #'5'
+		jsr ser_putc
+		lda #'h'
+		jsr ser_putc
+	.endmacro
 
 		.segment "CODE"
-
 
 ;-----------------------------------------------------------------------
 ; ui_clear:
@@ -57,7 +79,7 @@
 		; clear display
 		ldiw _clear_display
 		jsr ser_puts
-
+		
 		; start the status line
 		ldiw _status_line_pre
 		jsr ser_puts
@@ -84,6 +106,10 @@
 		rts
 	.endproc
 
+
+ui_redraw:
+		jsr ui_clear
+		rts
 
 ;-----------------------------------------------------------------------
 ; ui_put_snake_segment:
@@ -267,7 +293,7 @@ grid_y_to_row:
 		.byte "24"
 
 _clear_display:
-		.byte ESC,"[H",ESC,"[J"
+		.byte ESC,"[?25l",ESC,"[H",ESC,"[J"
 _status_line_pre:
 		.byte ESC,"[25;1H",ESC,"[7m",0
 _status_line_post:

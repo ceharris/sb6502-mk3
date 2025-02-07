@@ -1,20 +1,74 @@
 
 		.include "model.h.s"
-
+		.include "keys.h.s"
 		.segment "CODE"
+
+;-----------------------------------------------------------------------
+; model_init:
+; Configures the initial state for the game.
+;
+model_init:
+		lda #GF_AXIS_VERTICAL | GF_OP_DECREMENT
+		sta game_flags
+		lda #20
+		sta snake_head_x
+		lda #11
+		sta snake_head_y
+		rts
+
+
+;-----------------------------------------------------------------------
+; model_key_event:
+; Updates the model according to a received key event.
+; 
+; On entry:
+;	A = key code
+;
+model_key_event:
+		cmp #KEY_UP
+		beq @move_up
+		cmp #KEY_RIGHT
+		beq @move_right
+		cmp #KEY_DOWN
+		beq @move_down
+		cmp #KEY_LEFT
+		beq @move_left
+		rts
+@move_up:
+		lda game_flags
+		ora #<(GF_AXIS_VERTICAL | GF_OP_DECREMENT)
+		sta game_flags
+		rts
+@move_right:
+		lda game_flags
+		and #<~(GF_AXIS_VERTICAL | GF_OP_DECREMENT)
+		sta game_flags
+		rts
+@move_down:
+		lda game_flags
+		and #<~GF_OP_DECREMENT
+		ora #<GF_AXIS_VERTICAL
+		sta game_flags
+		rts
+@move_left:
+		lda game_flags
+		and #<~GF_AXIS_VERTICAL
+		ora #<GF_OP_DECREMENT
+		sta game_flags
+		rts
 
 
 ;-----------------------------------------------------------------------
 ; next_state:
 ; Resolve the next state of the game model.
 ;
-	.proc next_state
+model_next:
 		jsr _next_head_xy
 		stx next_x
 		sty next_y
 		jsr _next_head_addr
+		rts
 
-	.endproc
 
 ;-----------------------------------------------------------------------
 ; _next_head_addr:
@@ -27,8 +81,7 @@
 ;	(next_addr) = address of the cell
 ;	Y = 2*Y'
 ;
-	.proc _next_head_addr
-
+_next_head_addr:
 		; Y = 2*Y
 		tya
 		asl
@@ -50,8 +103,7 @@
 		sta next_addr+1
 
 		rts
-	
-	.endproc
+
 
 ;-----------------------------------------------------------------------
 ; _next_head_xy:
@@ -60,7 +112,7 @@
 ; On return:
 ;	X, Y = next grid coordinate for the snake head
 ;
-	.proc _next_head_xy
+_next_head_xy:
 		ldx snake_head_x
 		ldy snake_head_y
 		lda game_flags
@@ -73,7 +125,7 @@
 		lsr
 		bcs _decr_vertical
 		bcc _incr_vertical
-	.endproc
+		rts
 
 
 ;-----------------------------------------------------------------------
@@ -86,14 +138,13 @@
 ; On return:
 ;	X = (X' + 1) mod GRID_COLUMNS
 ;
-	.proc _incr_horizontal
+_incr_horizontal:
 		inx
 		cpx #GRID_COLUMNS
 		bcc @done
 		ldx #0
 @done:
 		rts	
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -106,14 +157,13 @@
 ; On return:
 ;	X = (X' - 1) mod GRID_COLUMNS
 ;
-	.proc _decr_horizontal
+_decr_horizontal:
 		dex
 		bmi @wrap
 		rts
 @wrap:
 		ldx #GRID_COLUMNS-1
 		rts	
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -126,14 +176,13 @@
 ; On return:
 ;	Y = (Y' + 1) mod GRID_ROWS
 ;
-	.proc _incr_vertical
+_incr_vertical:
 		iny
 		cpy #GRID_ROWS
 		bcc @done
 		ldy #0
 @done:
 		rts	
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -146,14 +195,13 @@
 ; On return:
 ;	Y = (Y' - 1) mod GRID_ROWS
 ;
-	.proc _decr_vertical
+_decr_vertical:
 		dey
 		bmi @wrap
 		rts
 @wrap:
 		ldy #GRID_ROWS-1
 		rts	
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -169,7 +217,7 @@
 ;	(game_flags) = (game_flags)' | GF_SCORE_DIRTY
 ;	A = (game_flags)' | GF_SCORE_DIRTY
 ;
-	.proc _incr_score
+_incr_score:
 		; add A to (score) using BCD
 		sed
 		clc
@@ -180,7 +228,6 @@
 		sta score+1
 		cld
 		bra _set_score_flag
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -198,7 +245,7 @@
 ;	A = (game_flags)' | GF_SCORE_DIRTY
 ;	B clobbered
 ;
-	.proc _decr_score
+_decr_score:
 		; subtract A from (score) using BCD
 		sta B
 		sed
@@ -216,7 +263,6 @@
 		stz score
 		stz score+1
 		bra _set_score_flag
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -227,12 +273,12 @@
 ; On return:
 ;	A = (game_flags) | GF_SCORE_DIRTY
 ;
-	.proc _set_score_flag
+_set_score_flag:
 		lda game_flags
 		ora #GF_SCORE_DIRTY
 		sta game_flags
 		rts
-	.endproc
+
 
 
 		.segment "RODATA"

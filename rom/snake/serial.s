@@ -8,18 +8,25 @@
                 ACIA_DIV16 = %00000001
                 ACIA_RESET = %00000011
                 ACIA_8N1  = %00010100
+                ACIA_RIE = %10000000
 
-                ACIA_CONFIG = ACIA_DIV16 | ACIA_8N1
+                ACIA_CONFIG = ACIA_DIV16 | ACIA_8N1 | ACIA_RIE
 
 
                 .segment "BSS"
-ser_buffer:
+in_ring:
+                .align 256
+                .res 256
+out_buffer:
                 .align 256
                 .res 256
 
-
                 .segment "ZEROPAGE"
-ser_tail:
+in_head:
+                .res 1
+in_tail:
+                .res 1
+out_tail:
                 .res 1
 
 
@@ -29,8 +36,7 @@ ser_tail:
 ; ser_init:
 ; Initialize serial communications interface.
 ;
-	.proc ser_init
-                
+ser_init:                
                 ; reset the ACIA
                 lda #ACIA_RESET
                 sta ACIA_CTRL
@@ -39,11 +45,34 @@ ser_tail:
                 lda #ACIA_CONFIG
                 sta ACIA_CTRL
                 
-                ; zero the buffer's tail pointer
-                stz ser_tail
+                ; zero the buffer pointers
+                stz in_head
+                stz in_tail
+                stz out_tail
                 
                 rts
-	.endproc
+
+;-----------------------------------------------------------------------
+; ser_isr:
+; Handles the ACIA received data interrupt.
+;
+ser_isr: 
+                pha
+@next_char:
+                lda ACIA_CTRL           ; fetch status register
+                lsr                     ; shift RDRF flag into carry
+                bcs @read_char          ; go if character waiting
+                pla
+                rti
+@read_char:
+                phx
+                ldx in_tail             ; fetch tail index for ring buffer
+                lda ACIA_DATA           ; fetch the input character
+                sta in_ring,x           ; store input character in the ring
+                inx                     ; next ring index
+                stx in_tail             ; store the new tail index
+                plx
+                bra @next_char          ; try to get more
 
 
 ;-----------------------------------------------------------------------
@@ -51,9 +80,9 @@ ser_tail:
 ; Flushes all characters waiting in the output buffer to the interface
 ; hardware.
 ;
-        .proc ser_flush
+ser_flush:
                 phy
-                ldy ser_tail
+                ldy out_tail
                 bne do_flush
                 ply
                 rts
@@ -71,7 +100,7 @@ do_flush:
                 beq @await_tdre
                 
                 ; send the next character
-                lda ser_buffer,x
+                lda out_buffer,x
                 sta ACIA_DATA
                 
                 ; update buffer index and counter
@@ -80,13 +109,11 @@ do_flush:
                 bne @await_tdre
 
                 ; zero the tail index pointer
-                stz ser_tail 
+                stz out_tail 
 
                 plx
                 ply                
                 rts
-
-        .endproc
 
 
 ;-----------------------------------------------------------------------
@@ -97,23 +124,32 @@ do_flush:
 ; On entry:
 ;       A = character to put
 ;
-        .proc ser_putc
-                
+ser_putc:
                 phy
-                ldy ser_tail
-                sta ser_buffer,y
+                ldy out_tail
+                sta out_buffer,y
                 iny
-                sty ser_tail
-                beq ser_flush::do_flush
+                sty out_tail
+                beq do_flush
                 ply
                 rts
 
-        .endproc
 
+;-----------------------------------------------------------------------
+; ser_putci:
+; Sends a character to the serial output immediately, bypassing the 
+; buffer.
+; 
+; On entry:
+;       A = character to put
+;
 ser_putci:
+                pha
                 lda ACIA_CTRL
                 and #ACIA_TDRE
                 beq ser_putci
+                pla
+                sta ACIA_DATA
                 rts
  
 
@@ -142,7 +178,7 @@ ser_putci:
 
 ;-----------------------------------------------------------------------
 ; ser_putsw:
-; Puts a "wide" tring into the output buffer -- i.e. a string in which
+; Puts a "wide" string into the output buffer -- i.e. a string in which
 ; every pair of characters will have an intervening space. The buffer 
 ; will be flushed as needed to accommodate the doubled length of the 
 ; string.
@@ -192,3 +228,54 @@ ser_putci:
                 bne @next
                 rts
         .endproc
+
+
+;-----------------------------------------------------------------------
+; ser_getc:
+; Gets a character from the serial input if one is available.
+;
+; On return:
+;       A contains an input character iff carry set
+;       X clobbered
+;
+ser_getc:
+                ldx in_head             ; get head index
+                cpx in_tail             ; compare to tail index
+                bne @char_waiting       ; go if at least one character
+                clc                     ; no character
+                rts
+@char_waiting:
+                lda in_ring,x           ; fetch next character from ring
+                inx                     ; next head index
+                stx in_head             ; store new head index
+                sec                     ; character available
+                rts
+
+;-----------------------------------------------------------------------
+; ser_getcp:
+; Gets a character from the serial input if one is available, pausing
+; for a short period of time to allow for an expected character to
+; arrive.
+;
+; On return:
+;       A contains an input character iff carry set
+;       X clobbered
+;
+
+ser_getcp:
+                ldx #$20                ; delay counter
+@loop:
+                lda in_head             ; fetch head pointer
+                cmp in_tail             ; compare to tail
+                bne @char_waiting       ; go if at least one char
+                dex
+                bne @loop               ; go if still in delay
+                clc                     ; no character
+                rts
+@char_waiting:
+                tax                     ; X = head pointer
+                lda in_ring,x           ; fetch character from buffer
+                inx                     ; head pointer++
+                stx in_head             ; save new head pointer
+                sec                     ; character received
+                rts

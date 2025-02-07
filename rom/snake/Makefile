@@ -1,37 +1,53 @@
 .PHONY: all clean
-.SUFFIXES: .bin .lbl .lst .map .o .s .s19 .sym
+.SUFFIXES: .bin .hex .lbl .lst .map .o .s .s19 .sym .tmp
 
-IMAGE=snake.bin
-S19_IMAGE=snake.s19
-S19_LOAD=0xE000
-S19_START=0xE014
-LD_CONFIG=snake.cfg
-INCLUDES=$(LD_CONFIG) model.h.s serial.h.s state.h.s ui.h.s ../include/ascii.h.s  ../include/ports.h.s
-MODULES=snake.o model.o serial.o state.o ui.o
+EXECUTABLE=snake
+LOAD_OFFSET=0xF000
+EXECUTION_START_LABEL=start
+LD_CONFIG=$(EXECUTABLE).cfg
+BIN_IMAGE=$(EXECUTABLE).bin
+S19_IMAGE=$(EXECUTABLE).s19
+HEX_IMAGE=$(EXECUTABLE).hex
+ENTRY_TMP=entry.tmp
+
+INCLUDES=$(LD_CONFIG) display.h.s keys.h.s model.h.s serial.h.s state.h.s ../include/ascii.h.s  ../include/ports.h.s
+MODULES=snake.o display.o keys.o model.o serial.o state.o vectors.o
 
 AS=ca65
 ASFLAGS=--cpu 65c02 -I ../include
 LD=ld65
 LDFLAGS=--config $(LD_CONFIG)
 
-all: $(S19_IMAGE)
+all: $(S19_IMAGE) $(HEX_IMAGE)
 
 clean:
-	-rm -f *.bin *.lbl *.lst *.map *.o *.s19 *.sym
+	-rm -f *.bin *.hex *.lbl *.lst *.map *.o *.s19 *.sym *.tmp
 
+acia.o: ../lib/acia.s $(INCLUDES)
+display.o: display.s $(INCLUDES)
+keys.o: keys.s $(INCLUDES)
 model.o: model.s $(INCLUDES)
-
 snake.o: snake.s $(INCLUDES)
-
 serial.o: serial.s $(INCLUDES)
+vectors.o: vectors.s $(INCLUDES)
 
-ui.o: ui.s $(INCLUDES)
+$(S19_IMAGE): $(BIN_IMAGE) $(ENTRY_TMP)
+	EXECUTION_START=$$(cat $(ENTRY_TMP)); \
+	srec_cat $< -Binary -Offset $(LOAD_OFFSET) -Output -Motorola \
+	    -execution-start-address=$$EXECUTION_START >$@
 
-$(S19_IMAGE): $(IMAGE)
-	srec_cat $< -Binary -Offset $(S19_LOAD) -Output -Motorola -Execution_Start_Address=$(S19_START) >$@
+$(HEX_IMAGE): $(BIN_IMAGE) $(ENTRY_TMP)
+	EXECUTION_START=$$(cat $(ENTRY_TMP)); \
+	srec_cat $< -Binary -Offset $(LOAD_OFFSET) -Output -Intel \
+	    -execution-start-address=$$EXECUTION_START >$@
 
-$(IMAGE): $(MODULES)
-	$(LD) $(LDFLAGS) $^ -o $@ -vm -m $*.map -Ln $*.lbl
+$(BIN_IMAGE): $(MODULES)
+	$(LD) $(LDFLAGS) $^ -o $@ -m $*.map -Ln $*.lbl
+
+$(ENTRY_TMP): $(BIN_IMAGE)
+	grep "$(EXECUTION_START_LABEL)" $(EXECUTABLE).lbl | head -1 | cut -f2 -d' ' > $(ENTRY_TMP); \
+	EXECUTION_START=$$(cat $(ENTRY_TMP)); \
+	echo "0x$${EXECUTION_START}" > $(ENTRY_TMP)
 
 %.o: %.s
 	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
