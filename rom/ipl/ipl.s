@@ -33,7 +33,7 @@ progtab:
 		.byte $8A	; 3: Tali Forth 2
 		.word taliforth_label
 		.byte 4
-		.byte $84	; 4: Snake
+		.byte $89	; 4: Snake
 		.word snake_label
 		.byte 9
 		.byte $80	; 9: Monitor
