@@ -15,9 +15,13 @@ snake_tail_x:
 		.res 1
 snake_tail_y:
 		.res 1
-next_x:
+next_head_x:
 		.res 1
-next_y:
+next_head_y:
+		.res 1
+prev_tail_x:
+		.res 1
+prev_tail_y:
 		.res 1
 game_flags:
 		.res 1
@@ -27,7 +31,7 @@ snake_head_addr:
 		.res 2
 snake_tail_addr:
 		.res 2
-next_addr:
+next_head_addr:
 		.res 2
 food_addr_0:
 		.res 2
@@ -41,4 +45,4 @@ score:
 
 		.segment "BSS"
 game_grid:
-		.res GRID_ROWS*GRID_COLUMNS
+		.res GRID_CELLS

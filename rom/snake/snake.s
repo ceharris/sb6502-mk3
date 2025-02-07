@@ -22,19 +22,9 @@ start:
 		jsr ui_clear
 
 @head:
-		ldx snake_head_x
-		ldy snake_head_y
-		jsr ui_put_snake_segment
-		jsr ser_flush
+		jsr ui_update
 		jsr delay
 		jsr model_next
-		ldx snake_head_x
-		ldy snake_head_y
-		jsr ui_put_empty_segment
-		lda next_x
-		sta snake_head_x
-		lda next_y
-		sta snake_head_y
 		jsr key_scan
 		beq @head
 		cmp #KEY_QUIT
@@ -47,7 +37,7 @@ start:
 		jsr ui_redraw
 		bra @head		
 delay:
-		ldx #$80
+		ldx #$60
 @loop:
 		iny
 		bne @loop

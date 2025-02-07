@@ -11,10 +11,6 @@
 
 		.global ui_clear
 		.global ui_redraw
-		.global ui_input
-		.global ui_move
-		.global ui_put_snake_segment
-		.global ui_put_empty_segment
-	
+		.global ui_update	
 
 	.endif

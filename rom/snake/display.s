@@ -111,6 +111,26 @@ ui_redraw:
 		jsr ui_clear
 		rts
 
+
+ui_update:
+		lda grow_count
+		bne @head
+		ldx prev_tail_x
+		ldy prev_tail_y
+		jsr ui_put_empty_segment
+@head:
+		ldx snake_head_x
+		ldy snake_head_y
+		jsr ui_put_snake_segment
+
+		lda game_flags
+		and #GF_SCORE_CHANGE
+		beq @done
+		jsr ui_put_score
+@done:
+		jsr ser_flush
+		rts
+
 ;-----------------------------------------------------------------------
 ; ui_put_snake_segment:
 ;
@@ -118,11 +138,10 @@ ui_redraw:
 ;	X = grid X coordinate
 ;	Y = grid Y coordinate
 ;
-	.proc ui_put_snake_segment
+ui_put_snake_segment:
 		jsr ui_put_grid_cup
 		UI_PUT_SNAKE_SEGMENT
 		rts
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -132,11 +151,10 @@ ui_redraw:
 ;	X = grid X coordinate
 ;	Y = grid Y coordinate
 ;
-	.proc ui_put_empty_segment
+ui_put_empty_segment:
 		jsr ui_put_grid_cup
 		UI_PUT_EMPTY_SEGMENT
 		rts
-	.endproc
 
 
 ;-----------------------------------------------------------------------
@@ -148,7 +166,7 @@ ui_redraw:
 ;	X = grid X coordinate
 ;	Y = grid Y coordinate
 ;
-	.proc ui_put_grid_cup
+ui_put_grid_cup:
 		phx
 		phy
 		UI_PUT_ANSI_CSI
@@ -189,7 +207,104 @@ ui_redraw:
 		plx
 		rts
 
-	.endproc
+ui_put_score:
+		ldiw _score_pre
+		jsr ser_puts		
+		lda score+1
+		ldx score
+		jsr _phex16
+		ldiw _score_post
+		jsr ser_puts
+		rts
+
+show_positions:
+		ldiw _status_line_pre
+		jsr ser_puts
+		lda #SPC
+		jsr ser_putc
+		lda snake_head_x
+		jsr _phex8
+		lda #','
+		jsr ser_putc
+		lda snake_head_y
+		jsr _phex8
+		lda #SPC
+		jsr ser_putc
+		lda snake_head_addr+1
+		ldx snake_head_addr
+		jsr _phex16
+		lda #SPC
+		jsr ser_putc
+		lda snake_tail_x
+		jsr _phex8
+		lda #','
+		jsr ser_putc
+		lda snake_tail_y
+		jsr _phex8
+		lda #SPC
+		jsr ser_putc
+		lda snake_tail_addr+1
+		ldx snake_tail_addr
+		jsr _phex16
+		ldiw _status_line_post
+		jsr ser_puts
+		rts
+
+		.byte ESC
+;-----------------------------------------------------------------------
+; _phex16:
+; Prints a 16-bit value as four hexadecimal digits
+;
+; On entry:
+;	AX contains the value to be printed
+;
+_phex16:
+		pha
+		jsr _phex8		; print the MSB
+		txa
+		jsr _phex8		; print the MSB
+		pla
+		rts
+
+
+;-----------------------------------------------------------------------
+; _phex8:
+; Displays an 8-bit value as two hexadecimal digits
+;
+; On entry:
+;	A contains the value to be displayed
+;
+_phex8:
+		pha			; preserve input value
+		; shift upper nibble to lower nibble
+		lsr
+		lsr
+		lsr
+		lsr
+		jsr _phex4		; display upper nibble in hex
+		pla			; recover input value
+		jsr _phex4		; display lower nibble in hex
+		rts	
+
+
+;-----------------------------------------------------------------------
+; _phex4:
+; Displays a 4-bit value as a hexadecimal digit.
+;
+; On entry:
+; 	Lower 4-bits of A contain the value to be displayed
+;
+_phex4:
+		and #$f			; isolate lower nibble
+		clc	
+		adc #'0'		; A now in ['0'..)
+		cmp #'9' + 1
+		bcc @no_adjust		; go if A in ['0'..'9']
+		clc
+		adc #7			; A now in ['A'..'F']
+@no_adjust:
+		jsr ser_putc		; display hex digit
+		rts
 
 
 		.segment "RODATA"
@@ -297,6 +412,7 @@ _clear_display:
 _status_line_pre:
 		.byte ESC,"[25;1H",ESC,"[7m",0
 _status_line_post:
+_score_post:
 		.byte ESC,"[0m",0
 _title_cup:
 		.byte ESC,"[25;34H",0
@@ -308,3 +424,5 @@ _game_over_label:
 		.byte "GAME OVER",0
 _score_label:
 		.byte ESC,"[25;69HScore 0000",0
+_score_pre:
+		.byte ESC,"[25;75H",ESC,"[7m",0

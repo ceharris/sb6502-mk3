@@ -10,7 +10,8 @@ S19_IMAGE=$(EXECUTABLE).s19
 HEX_IMAGE=$(EXECUTABLE).hex
 ENTRY_TMP=entry.tmp
 
-INCLUDES=$(LD_CONFIG) display.h.s keys.h.s model.h.s serial.h.s state.h.s ../include/ascii.h.s  ../include/ports.h.s
+INCLUDES=$(LD_CONFIG) display.h.s keys.h.s model.h.s serial.h.s state.h.s \
+	../include/ascii.h.s ../include/ports.h.s
 MODULES=snake.o display.o keys.o model.o serial.o state.o vectors.o
 
 AS=ca65
@@ -23,7 +24,6 @@ all: $(S19_IMAGE) $(HEX_IMAGE)
 clean:
 	-rm -f *.bin *.hex *.lbl *.lst *.map *.o *.s19 *.sym *.tmp
 
-acia.o: ../lib/acia.s $(INCLUDES)
 display.o: display.s $(INCLUDES)
 keys.o: keys.s $(INCLUDES)
 model.o: model.s $(INCLUDES)

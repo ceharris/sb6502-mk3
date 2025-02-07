@@ -3,17 +3,61 @@
 		.include "keys.h.s"
 		.segment "CODE"
 
+		GRID_PAGES = GRID_CELLS / 256
+		GRID_REMAINDER = GRID_CELLS - 256*GRID_PAGES
+
 ;-----------------------------------------------------------------------
 ; model_init:
 ; Configures the initial state for the game.
 ;
 model_init:
-		lda #GF_AXIS_VERTICAL | GF_OP_DECREMENT
+		jsr _init_grid
+		lda #0
 		sta game_flags
-		lda #20
+		sta score
+		sta score+1
+		lda #GAME_START_X
 		sta snake_head_x
-		lda #11
+		sta snake_tail_x
+		lda #GAME_START_Y
 		sta snake_head_y
+		sta snake_tail_y
+		lda #8
+		sta grow_count
+		rts
+
+
+;-----------------------------------------------------------------------
+; next_state:
+; Resolve the next state of the game model.
+;
+model_next:
+		jsr _update_head
+		lda game_flags
+		and #(GF_AXIS_VERTICAL | GF_OP_DECREMENT)
+		ora #$80
+		sta (snake_head_addr)
+		lda #SNAKE_HEAD_CELL
+		sta (next_head_addr)
+		lda grow_count
+		bne @grow
+		jsr _update_tail
+		bra @finish
+@grow:
+		dea
+		sta grow_count
+@finish:		
+		lda next_head_x
+		sta snake_head_x
+		lda next_head_y
+		sta snake_head_y
+		lda next_head_addr
+		sta snake_head_addr
+		lda next_head_addr+1
+		sta snake_head_addr+1
+
+		lda #1
+		jsr _incr_score
 		rts
 
 
@@ -57,74 +101,166 @@ model_key_event:
 		sta game_flags
 		rts
 
-
-;-----------------------------------------------------------------------
-; next_state:
-; Resolve the next state of the game model.
-;
-model_next:
-		jsr _next_head_xy
-		stx next_x
-		sty next_y
-		jsr _next_head_addr
+_init_grid:
+		lda #<game_grid
+		sta W
+		lda #>game_grid
+		sta W+1
+		lda #EMPTY_CELL
+		ldx #GRID_PAGES
+		ldy #0
+@page_loop:		
+		sta (W),y
+		iny
+		bne @page_loop
+		inc W+1			; next page
+		dex
+		bne @page_loop
+		ldx #GRID_REMAINDER
+@remainder_loop:
+		sta (W),y
+		iny
+		dex
+		bne @remainder_loop
 		rts
 
 
 ;-----------------------------------------------------------------------
-; _next_head_addr:
-; Determine the cell address for the next position of the snake head
+; _update_head:
+; Update the head of the snake.
+; Coordinates of the new head cell are determined using the current
+; head coordinates and the bit-mapped game flags.
 ;
 ; On entry:
-;	X, Y = grid coordinates of the next position of the snake head
-;
+;	snake_head_x, snake_head_y are the current head coordinates
+; 
 ; On return:
-;	(next_addr) = address of the cell
-;	Y = 2*Y'
+;	next_head_x, next_head_y are the new new head coordinates
+;	next_head_addr is the grid offset of the new head cell
+;	snake_head_x, snake_head_y is unchanged
+;	snake_head_addr is unchanged
+;	grid content is unchanged
 ;
-_next_head_addr:
-		; Y = 2*Y
+_update_head:
+		ldx snake_head_x
+		ldy snake_head_y
+		; use game_flags to determine next head cell
+		lda game_flags		; get flags
+		lsr			; set carry to vertical/horizontal flag
+		bcs @vertical_next	; go if next is on vertical axis
+		lsr			; set carry to decrement/increment flag
+		bcs @dec_horizontal	; go if decrementing
+		jsr _incr_horizontal	; increment X coordinate with wrap
+		bra @next_head_addr
+@dec_horizontal:
+		jsr _decr_horizontal	; decrement X coordinate with wrap
+		bra @next_head_addr
+@vertical_next:
+		lsr			; set carry to decrement/increment flag
+		bcs @dec_vertical	; go if decrementing
+		jsr _incr_vertical	; increment Y coordinate with wrap
+		bra @next_head_addr
+@dec_vertical:
+		jsr _decr_vertical	; decrement Y coordinate with wrap
+
+@next_head_addr:
+		stx next_head_x
+		sty next_head_y
+
+		; Y = 2*next_head_y to find the offset within _y_offset_addr table
 		tya
 		asl
 		tay
 		
-		; fetch address of column 0 in the row and store in next_addr
+		; fetch address of column 0 in row Y and store in next_head_addr
 		lda _y_offset_addr,y
-		sta next_addr
+		sta next_head_addr
 		lda _y_offset_addr+1,y
-		sta next_addr+1
+		sta next_head_addr+1
 
-		; add the column to get the address of the cell and store in next_addr
-		txa
+		; add the column to get the address of the cell and store in next_head_addr
+		txa			; A = next_head_x
 		clc
-		adc next_addr
-		sta next_addr
-		lda #0
-		adc next_addr+1
-		sta next_addr+1
-
+		adc next_head_addr
+		sta next_head_addr
+		bcc @no_carry
+		inc next_head_addr+1
+@no_carry:
 		rts
 
 
 ;-----------------------------------------------------------------------
-; _next_head_xy:
-; Determine the next grid XY coordinate for the snake head.
+; _update_tail:
+; Update the tail of the snake.
+; Coordinates of the new tail cell are determined using the current
+; tail cell coordinates and the bit-mapped flags in the current cell
+; itself.
+;
+; On entry:
+;	(snake_tail_x, snake_tail_y) are the current tail coordinates
 ;
 ; On return:
-;	X, Y = next grid coordinate for the snake head
+;	(prev_tail_x, prev_tail_y) are the tail coordinates on entry
+;	(snake_tail_x, snake_tail_y) are the new tail coordinates
+;	(snake_tail_addr) is the grid offset of the new tail cell
+;	previous cell is empty
 ;
-_next_head_xy:
-		ldx snake_head_x
-		ldy snake_head_y
-		lda game_flags
-		lsr
-		bcs @axis_vertical
-		lsr
-		bcs _decr_horizontal
-		bcc _incr_horizontal
-@axis_vertical:
-		lsr
-		bcs _decr_vertical
-		bcc _incr_vertical
+_update_tail:
+		; save snake tail coordinates
+		lda snake_tail_x
+		sta prev_tail_x
+		tax			; X = current tail X
+		lda snake_tail_y
+		sta prev_tail_y
+		tay			; Y = current tail Y
+
+		; use tail cell content to determine next tail cell
+		lda (snake_tail_addr)	; get contents of tail cell
+		lsr			
+		bcs @vertical_next	; go if next is on vertical axis
+		lsr			; go if decrementing
+		bcs @dec_horizontal
+		jsr _incr_horizontal	; increment X coordinate with wrap
+		bra @next_tail_addr
+@dec_horizontal:
+		jsr _decr_horizontal	; decrement X coordinate with wrap
+		bra @next_tail_addr
+@vertical_next:
+		lsr			; set carry if decrementing
+		bcs @dec_vertical
+		jsr _incr_vertical	; increment Y coordinate with wrap
+		bra @next_tail_addr
+@dec_vertical:
+		jsr _decr_vertical	; decrement Y coordinate with wrap
+
+@next_tail_addr:
+		; save new tail XY
+		stx snake_tail_x		
+		sty snake_tail_y
+
+		; empty the current tail cell
+		lda #EMPTY_CELL
+		sta (snake_tail_addr)	
+
+		; Y = 2*snake_tail_y
+		tya
+		asl
+		tay
+		
+		; fetch address of column 0 in the row and store in snake_tail_addr
+		lda _y_offset_addr,y
+		sta snake_tail_addr
+		lda _y_offset_addr+1,y
+		sta snake_tail_addr+1
+
+		; add the column to get the address of the cell and store in snake_tail_addr
+		txa			; A = snake_tail_x
+		clc
+		adc snake_tail_addr
+		sta snake_tail_addr
+		bcc @no_carry
+		inc snake_tail_addr+1
+@no_carry:
 		rts
 
 
@@ -214,8 +350,8 @@ _decr_vertical:
 ;
 ; On return:
 ;	(score) = (score)' + A'
-;	(game_flags) = (game_flags)' | GF_SCORE_DIRTY
-;	A = (game_flags)' | GF_SCORE_DIRTY
+;	(game_flags) = (game_flags)' | GF_SCORE_CHANGE
+;	A = (game_flags)' | GF_SCORE_CHANGE
 ;
 _incr_score:
 		; add A to (score) using BCD
@@ -241,8 +377,8 @@ _incr_score:
 ;
 ; On return:
 ;	(score) = (score)' - A'
-;	(game_flags) = (game_flags)' | GF_SCORE_DIRTY
-;	A = (game_flags)' | GF_SCORE_DIRTY
+;	(game_flags) = (game_flags)' | GF_SCORE_CHANGE
+;	A = (game_flags)' | GF_SCORE_CHANGE
 ;	B clobbered
 ;
 _decr_score:
@@ -267,15 +403,15 @@ _decr_score:
 
 ;-----------------------------------------------------------------------
 ; _set_score_flag:
-; Sets the dirty flag for the score so that the UI representation will 
+; Sets the change flag for the score so that the UI representation will 
 ; be updated at the next refresh.
 ;
 ; On return:
-;	A = (game_flags) | GF_SCORE_DIRTY
+;	A = (game_flags) | GF_SCORE_CHANGE
 ;
 _set_score_flag:
 		lda game_flags
-		ora #GF_SCORE_DIRTY
+		ora #GF_SCORE_CHANGE
 		sta game_flags
 		rts
 
