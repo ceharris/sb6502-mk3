@@ -109,6 +109,31 @@
 
 ui_redraw:
 		jsr ui_clear
+		ldx #0
+		ldy #0
+		jsr ui_put_grid_cup
+		ldiw game_grid
+		ldy #GRID_ROWS
+@next_row:
+		ldx #GRID_COLUMNS
+@next_column:
+		lda (W)
+		and #$80
+		beq @snake_segment
+		UI_PUT_SNAKE_SEGMENT
+		bra @until_done
+@snake_segment:
+		UI_PUT_EMPTY_SEGMENT
+@until_done:
+		inc W
+		bne @no_carry
+		inc W+1
+@no_carry:
+		dex
+		bne @next_column
+		dey
+		bne @next_row
+		jsr ser_flush	
 		rts
 
 
