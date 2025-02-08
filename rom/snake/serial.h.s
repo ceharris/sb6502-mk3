@@ -3,7 +3,10 @@
 
 		.global ser_init
 		.global ser_isr
-		.global ser_flush
+
+		.global ser_oflush
+		.global ser_iflush
+
 		.global ser_putc
 		.global ser_putci
 		.global ser_puts

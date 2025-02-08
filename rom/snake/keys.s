@@ -39,10 +39,12 @@ key_scan:
 		beq @right_key
 		cmp #'J'
 		beq @left_key
-		cmp #'C'-$40
-		beq @quit_key
-		cmp #'R'-$40
+		cmp #'P'
+		beq @play_key
+		cmp #'R'
 		beq @redraw_key
+		cmp #'Q'
+		beq @quit_key
 @none:
 		lda #KEY_NONE
 		rts
@@ -58,10 +60,13 @@ key_scan:
 @left_key:
 		lda #KEY_LEFT
 		rts
-@quit_key:
-		lda #KEY_QUIT
+@play_key:
+		lda #KEY_PLAY
 		rts
 @redraw_key:
 		lda #KEY_REDRAW
+		rts
+@quit_key:
+		lda #KEY_QUIT
 		rts
 

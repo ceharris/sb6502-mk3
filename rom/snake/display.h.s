@@ -11,6 +11,9 @@
 
 		.global ui_clear
 		.global ui_redraw
-		.global ui_update	
+		.global ui_update
+		.global ui_life_over
+		.global ui_game_over
+		.global ui_play_again	
 
 	.endif

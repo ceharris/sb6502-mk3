@@ -11,53 +11,76 @@
 ; Configures the initial state for the game.
 ;
 model_init:
-		jsr _init_grid
 		lda #0
 		sta game_flags
+		sta grow_count
 		sta score
 		sta score+1
 		lda #GAME_START_X
 		sta snake_head_x
-		sta snake_tail_x
 		lda #GAME_START_Y
 		sta snake_head_y
-		sta snake_tail_y
-		lda #8
-		sta grow_count
+		lda #NUM_LIVES
+		sta lives
 		rts
 
 
+model_reset:
+		jsr _empty_grid
+		lda #16
+		sta grow_count
+		lda game_flags
+		and #GF_DIRECTION_BITS
+		sta game_flags
+		lda snake_head_x
+		sta snake_tail_x
+		lda snake_head_y
+		sta snake_tail_y
+		jsr _set_snake_tail_addr
+		rts
+
 ;-----------------------------------------------------------------------
-; next_state:
+; model_next:
 ; Resolve the next state of the game model.
 ;
+; On return:
+;	carry set if snake bit itself and died
+;
 model_next:
-		jsr _update_head
-		lda game_flags
-		and #(GF_AXIS_VERTICAL | GF_OP_DECREMENT)
-		ora #$80
-		sta (snake_head_addr)
+		jsr _update_head	; determine new head location
+		lda (next_head_addr)	; fetch cell at new head location
+		and #SNAKE_CELL		; test for snake cell
+		beq @not_snake		; go if not a snake cell
+		jsr _commit_head	; commit new head location
+		sec			; carry indicates snake bit itself
+		rts
+@not_snake:
+		; put breadcrumb into current head cell
+		lda game_flags		; fetch flags
+		and #GF_DIRECTION_BITS	; mask off all but direction bits
+		ora #SNAKE_CELL		; set snake cell bit
+		sta (snake_head_addr)	; current cell now "points" to next
+
+		; put snake head into new head cell
 		lda #SNAKE_HEAD_CELL
 		sta (next_head_addr)
-		lda grow_count
-		bne @grow
-		jsr _update_tail
-		bra @finish
-@grow:
-		dea
-		sta grow_count
-@finish:		
-		lda next_head_x
-		sta snake_head_x
-		lda next_head_y
-		sta snake_head_y
-		lda next_head_addr
-		sta snake_head_addr
-		lda next_head_addr+1
-		sta snake_head_addr+1
 
+		; is the snake now growing?
+		lda grow_count		; fetch grow count
+		beq @not_growing	; go if not growing
+		dea			; reduce grow count
+		sta grow_count		; store new grow count
+		bra @finish		; finish without updating tail
+
+@not_growing:
+		jsr _update_tail	; determine new tail position
+
+@finish:		
+		jsr _commit_head	; commit new head position
+		
 		lda #1
 		jsr _incr_score
+		clc			; snake still alive
 		rts
 
 
@@ -101,7 +124,11 @@ model_key_event:
 		sta game_flags
 		rts
 
-_init_grid:
+;-----------------------------------------------------------------------
+; _empty_grid:
+; Initializes the game grid by marking all cells as empty.
+;
+_empty_grid:
 		lda #<game_grid
 		sta W
 		lda #>game_grid
@@ -190,6 +217,21 @@ _update_head:
 
 
 ;-----------------------------------------------------------------------
+; _commit_head:
+; Commits the computed next head position as the new head position.
+;
+_commit_head:
+		lda next_head_x
+		sta snake_head_x
+		lda next_head_y
+		sta snake_head_y
+		lda next_head_addr
+		sta snake_head_addr
+		lda next_head_addr+1	
+		sta snake_head_addr+1
+		rts
+
+;-----------------------------------------------------------------------
 ; _update_tail:
 ; Update the tail of the snake.
 ; Coordinates of the new tail cell are determined using the current
@@ -242,6 +284,13 @@ _update_tail:
 		lda #EMPTY_CELL
 		sta (snake_tail_addr)	
 
+		bra _finish_snake_tail_addr
+
+_set_snake_tail_addr:
+		ldx snake_tail_x
+		ldy snake_tail_y
+
+_finish_snake_tail_addr:
 		; Y = 2*snake_tail_y
 		tya
 		asl

@@ -76,11 +76,11 @@ ser_isr:
 
 
 ;-----------------------------------------------------------------------
-; ser_flush:
+; ser_oflush:
 ; Flushes all characters waiting in the output buffer to the interface
 ; hardware.
 ;
-ser_flush:
+ser_oflush:
                 phy
                 ldy out_tail
                 bne do_flush
@@ -117,6 +117,16 @@ do_flush:
 
 
 ;-----------------------------------------------------------------------
+; ser_iflush:
+; Discards any characters waiting in the input ring buffer.
+;
+ser_iflush:
+                jsr ser_getc
+                bcs ser_iflush
+                rts
+
+
+;-----------------------------------------------------------------------
 ; ser_putc:
 ; Puts a character into the output buffer. If the buffer becomes full
 ; as a result, it is immediately flushed.
@@ -145,9 +155,10 @@ ser_putc:
 ;
 ser_putci:
                 pha
+@await_tdre:
                 lda ACIA_CTRL
                 and #ACIA_TDRE
-                beq ser_putci
+                beq @await_tdre
                 pla
                 sta ACIA_DATA
                 rts

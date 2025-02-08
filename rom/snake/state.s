@@ -27,6 +27,8 @@ game_flags:
 		.res 1
 grow_count:
 		.res 1
+lives:
+		.res 1
 snake_head_addr:
 		.res 2
 snake_tail_addr:

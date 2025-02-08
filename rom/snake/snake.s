@@ -1,5 +1,6 @@
 
 		.include "ascii.h.s"
+		.include "delay.h.s"
 		.include "display.h.s"
 		.include "keys.h.s"
 		.include "model.h.s"
@@ -18,33 +19,51 @@ start:
 		jsr ser_init
 		cli
 
+play_again:
 		jsr model_init
-		jsr ui_clear
+next_life:
+		jsr model_reset
+		jsr ui_clear		; initialize UI display
+		jsr ser_iflush		; discard any early key presses
+loop:
+		jsr ui_update		; display current model state
+		DELAY $6000
+		jsr model_next		; compute next model state
+		bcs life_over		; go if snake bit itself
+		jsr key_scan		; scan for user key presses
+		beq loop		; go if no key
+		cmp #KEY_QUIT		
+		beq game_over		; exit on QUIT key
+		cmp #KEY_REDRAW
+		beq redraw		; redraw the UI display
+		jsr model_key_event	; interpret key as event
+		bra loop
+redraw:
+		jsr ui_redraw
+		jmp loop		
 
-@head:
-		jsr ui_update
-		jsr delay
-		jsr model_next
-		jsr key_scan
-		beq @head
+life_over:
+		dec lives		; lives--
+		beq game_over		; used all lives
+		jsr ui_life_over	; display life over
+		DELAY $0
+		jmp next_life		; still in it
+
+game_over:
+		jsr ui_game_over
+@loop:
+		jsr ui_play_again	; prompt user to play again
+		jsr key_scan		; scan for user key presses
+		beq @loop		; no key pressed
 		cmp #KEY_QUIT
 		beq soft_reset
 		cmp #KEY_REDRAW
-		beq @redraw
-		jsr model_key_event
-		bra @head
-@redraw:
-		jsr ui_redraw
-		bra @head		
-delay:
-		ldx #$60
-@loop:
-		iny
+		beq game_over		; redraw game over screen
+		cmp #KEY_PLAY
 		bne @loop
-		dex
-		bne @loop
-		rts
-	
+		jmp play_again
+
+
 		.include "reset.s"	
 
 

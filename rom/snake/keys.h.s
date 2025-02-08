@@ -8,6 +8,7 @@
 		KEY_LEFT = 4
 		KEY_QUIT = 5
 		KEY_REDRAW = 6
+		KEY_PLAY = 7
 
 		.global key_scan
 
