@@ -2,6 +2,7 @@
 		.include "ascii.h.s"
 		.include "delay.h.s"
 		.include "display.h.s"
+		.include "prng.h.s"
 		.include "serial.h.s"
 		.include "state.h.s"
 
@@ -33,11 +34,50 @@
 		jsr ser_putc
 	.endmacro
 
+	.macro UI_PUT_DUMP_COLOR
+		UI_PUT_ANSI_CSI
+		lda #'4'
+		jsr ser_putc
+		lda #'4'
+		jsr ser_putc
+		lda #'m'
+		jsr ser_putc
+		UI_PUT_ANSI_CSI
+		lda #'3'
+		jsr ser_putc
+		lda #'7'
+		jsr ser_putc
+		lda #'m'
+		jsr ser_putc
+	.endmacro
+
+
+	.macro UI_PUT_SNAKE_ALT_COLOR
+		UI_PUT_ANSI_CSI
+		lda #'3'
+		jsr ser_putc
+		lda #'5'
+		jsr ser_putc
+		lda #'m'
+		jsr ser_putc
+	.endmacro
+
+
 	.macro UI_PUT_SNAKE_COLOR
 		UI_PUT_ANSI_CSI
 		lda #'9'
 		jsr ser_putc
 		lda #'3'
+		jsr ser_putc
+		lda #'m'
+		jsr ser_putc
+	.endmacro
+
+	.macro UI_PUT_HEAD_COLOR
+		UI_PUT_ANSI_CSI
+		lda #'9'
+		jsr ser_putc
+		lda #'2'
 		jsr ser_putc
 		lda #'m'
 		jsr ser_putc
@@ -133,12 +173,16 @@ ui_clear:
 		ldiw _score_label
 		jsr ser_puts
 
+		; display current score
+		jsr ui_put_score
+
+		; display current life count
+		jsr ui_put_life_count
+
 		; finish the status line
 		ldiw _status_line_post
 		jsr ser_puts
 
-		; display current life count
-		jsr ui_put_life_count
 		rts
 
 
@@ -156,14 +200,21 @@ ui_redraw:
 @next_row:
 		ldx #GRID_COLUMNS
 @next_column:
+		UI_PUT_EMPTY_COLOR
 		lda (W)
+		beq @empty
 		and #$80
-		beq @snake_segment
+		beq @food
 		UI_PUT_SNAKE_COLOR
 		UI_PUT_SNAKE_SEGMENT
 		bra @until_done
-@snake_segment:
-		UI_PUT_EMPTY_COLOR
+@food:
+		lda (W)
+		adc #'0'		
+		jsr ser_putc
+		jsr ser_putc
+		bra @until_done
+@empty:
 		UI_PUT_EMPTY_SEGMENT
 @until_done:
 		inc W
@@ -184,11 +235,36 @@ ui_redraw:
 ; Updates the UI display to match the current state of the game model
 ;
 ui_update:
+		lda game_flags
+		asl			; carry = food change flag
+		bcc @check_grow_count	
+		asl			; carry = food waiting flag
+		bcs @food_waiting	
+		ldx food_x
+		ldy food_y0
+		jsr ui_put_empty_cell
+		ldx food_x
+		ldy food_y1
+		jsr ui_put_empty_cell
+		bra @check_grow_count
+@food_waiting:
+		ldx food_x
+		ldy food_y0
+		lda (food_addr_0)
+		jsr ui_put_food_cell
+		ldx food_x
+		ldy food_y1
+		lda (food_addr_1)
+		jsr ui_put_food_cell
+@check_grow_count:
+		ldx prev_head_x
+		ldy prev_head_y
+		jsr ui_put_alt_snake_segment
 		lda grow_count
 		bne @head
 		ldx prev_tail_x
 		ldy prev_tail_y
-		jsr ui_put_empty_segment
+		jsr ui_put_empty_cell
 @head:
 		ldx snake_head_x
 		ldy snake_head_y
@@ -198,9 +274,15 @@ ui_update:
 		and #GF_SCORE_CHANGE
 		beq @done
 		jsr ui_put_score
+
 @done:
+		; clear UI change flags
+		lda game_flags
+		and #<(~GF_UI_CHANGE_BITS)
+		sta game_flags
 		jsr ser_oflush
 		rts
+
 
 ;-----------------------------------------------------------------------
 ; ui_life_over:
@@ -215,7 +297,7 @@ ui_life_over:
 		jsr ui_put_bloody_segment
 		jsr ser_oflush
 		DELAY $8000
-		jsr ui_put_empty_segment
+		jsr ui_put_empty_cell
 		jsr ser_oflush
 		DELAY $8000
 		plx
@@ -289,7 +371,7 @@ ui_play_again:
 		jsr ui_put_bloody_segment
 		bra @finish
 @empty:
-		jsr ui_put_empty_segment
+		jsr ui_put_empty_cell
 @finish:
 		jsr ser_oflush
 		DELAY $8000
@@ -317,22 +399,67 @@ ui_put_bloody_segment:
 ;
 ui_put_snake_segment:
 		jsr ui_put_grid_cup
-		UI_PUT_SNAKE_COLOR
+		UI_PUT_HEAD_COLOR
 		UI_PUT_SNAKE_SEGMENT
 		rts
 
 
 ;-----------------------------------------------------------------------
-; ui_put_empty_segment:
+; ui_put_alt_snake_segment:
 ;
 ; On entry:
 ;	X = grid X coordinate
 ;	Y = grid Y coordinate
 ;
-ui_put_empty_segment:
+ui_put_alt_snake_segment:
+		jsr ui_put_grid_cup
+		lda game_flags
+		and #GF_ALT_COLOR
+		bne @put_alt_color
+		UI_PUT_SNAKE_COLOR
+		bra @put_segment
+@put_alt_color:
+		UI_PUT_SNAKE_ALT_COLOR
+@put_segment:
+		UI_PUT_SNAKE_SEGMENT
+		lda game_flags
+		eor #GF_ALT_COLOR
+		sta game_flags
+		rts
+
+
+;-----------------------------------------------------------------------
+; ui_put_empty_cell:
+;
+; On entry:
+;	X = grid X coordinate
+;	Y = grid Y coordinate
+;
+ui_put_empty_cell:
 		jsr ui_put_grid_cup
 		UI_PUT_EMPTY_COLOR
 		UI_PUT_EMPTY_SEGMENT
+		rts
+
+
+;-----------------------------------------------------------------------
+; ui_put_food_cell:
+; Displays a food cell.
+;
+; On entry:
+;	A = food value
+;	X = grid X coordinate
+;	Y = grid Y coordinate
+;
+ui_put_food_cell:
+		pha
+		jsr ui_put_grid_cup
+		UI_PUT_EMPTY_COLOR
+		pla
+		clc
+		adc #'0'
+		jsr ser_putc
+		jsr ser_putc
 		rts
 
 
@@ -416,6 +543,105 @@ ui_put_score:
 		jsr ser_puts
 		rts
 
+
+;----------------------------------------------------------------------
+; ui_dump_grid
+; Dump the contents of the grid in hexdecimal.
+;
+ui_dump_grid:
+		; clear display
+		ldiw _clear_display
+		jsr ser_puts
+		ldiw game_grid
+		ldx #GRID_ROWS		; X = row count
+@next_row:
+		ldy #0			; Y = column index
+@next_column:
+		lda (W),y
+		bne @non_empty
+		UI_PUT_EMPTY_COLOR
+		lda #'-'
+		jsr ser_putc
+		jsr ser_putc
+		bra @check_column
+@non_empty:
+		UI_PUT_DUMP_COLOR
+		lda (W),y
+		jsr _phex8		; print cell in hexadecimal
+@check_column:
+		iny
+		cpy #GRID_COLUMNS
+		bne @next_column
+		clc
+		lda W
+		adc #GRID_COLUMNS
+		sta W
+		bcc @no_carry
+		inc W+1
+@no_carry:
+		lda #CR
+		jsr ser_putc
+		lda #LF
+		jsr ser_putc
+		dex
+		bne @next_row
+		ldiw _status_line_pre
+		jsr ser_puts
+		ldy #8
+@loop:
+		ldx #4
+		lda #SPC
+		jsr ser_putsc
+		lda #'+'
+		jsr ser_putc
+		ldx #4
+		lda #SPC
+		jsr ser_putsc
+		lda #'|'
+		jsr ser_putc
+		dey
+		bne @loop
+		ldiw _status_line_post
+		jsr ser_puts
+		jsr ser_oflush
+		rts
+
+show_food:
+		ldiw _status_line_pre
+		jsr ser_puts
+		lda #SPC
+		jsr ser_putc
+		jsr ser_putc
+		lda food_x
+		jsr _phex8
+		lda #','
+		jsr ser_putc
+		lda food_y0
+		jsr _phex8
+		lda #SPC
+		jsr ser_putc
+		lda food_addr_0+1
+		ldx food_addr_0
+		jsr _phex16
+		lda #SPC
+		lda #SPC
+		jsr ser_putc
+		lda food_x
+		jsr _phex8
+		lda #','
+		jsr ser_putc
+		lda food_y1
+		jsr _phex8
+		lda #SPC
+		jsr ser_putc
+		lda food_addr_1+1
+		ldx food_addr_1
+		jsr _phex16		
+		ldiw _status_line_post
+		jsr ser_puts
+		jsr ser_oflush
+		rts
+
 show_positions:
 		ldiw _status_line_pre
 		jsr ser_puts
@@ -469,9 +695,12 @@ _pbcd16:
 		bra @print_lsb	
 @print_msb:
 		jsr _pbcd8		; print MSB
-@print_lsb:
 		txa
 		jsr _pbcd8u		; print LSB
+		rts
+@print_lsb:
+		txa
+		jsr _pbcd8		; print LSB
 		rts
 
 ;-----------------------------------------------------------------------

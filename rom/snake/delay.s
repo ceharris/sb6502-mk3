@@ -18,7 +18,10 @@ delay32:
 		jsr delay16
 		dec delay_upper16
 		bne delay32
+		lda delay_upper16+1
+		beq @done
 		dec delay_upper16+1
-		bne delay32
+		bra delay32
+@done:
 		rts
 

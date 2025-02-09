@@ -16,4 +16,6 @@
 		.global ui_game_over
 		.global ui_play_again	
 
+		.global ui_dump_grid
+		
 	.endif

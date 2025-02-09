@@ -2,8 +2,28 @@
 		.include "keys.h.s"
 		.include "serial.h.s"
 
+		.segment "ZEROPAGE"
+B:
+		.res 1
+
 		.segment "CODE"
 
+key_wait:
+		sta B
+@loop:
+		jsr ser_getc
+		bcc @loop
+		cmp #CTRL_C
+		bne @compare
+		sec
+		rts
+@compare:
+		and #$df
+		cmp B
+		bne @loop
+		clc
+		rts
+		
 key_scan:
 		jsr ser_getc 
 		bcc @none
@@ -43,6 +63,8 @@ key_scan:
 		beq @play_key
 		cmp #'R'
 		beq @redraw_key
+		cmp #'D'
+		beq @dump_key
 		cmp #'Q'
 		beq @quit_key
 @none:
@@ -65,6 +87,9 @@ key_scan:
 		rts
 @redraw_key:
 		lda #KEY_REDRAW
+		rts
+@dump_key:
+		lda #KEY_DUMP
 		rts
 @quit_key:
 		lda #KEY_QUIT

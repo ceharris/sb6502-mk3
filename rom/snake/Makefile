@@ -10,9 +10,10 @@ S19_IMAGE=$(EXECUTABLE).s19
 HEX_IMAGE=$(EXECUTABLE).hex
 ENTRY_TMP=entry.tmp
 
-INCLUDES=$(LD_CONFIG) delay.h.s display.h.s keys.h.s model.h.s serial.h.s state.h.s \
-	../include/ascii.h.s ../include/ports.h.s
-MODULES=snake.o delay.o display.o keys.o model.o serial.o state.o vectors.o
+INCLUDES=$(LD_CONFIG) delay.h.s display.h.s keys.h.s model.h.s prng.h.s \
+	serial.h.s state.h.s ../include/ascii.h.s ../include/ports.h.s
+MODULES=snake.o delay.o display.o keys.o model.o prng.o serial.o state.o \
+	vectors.o
 
 AS=ca65
 ASFLAGS=--cpu 65c02 -I ../include
@@ -28,8 +29,9 @@ delay.o: delay.s $(INCLUDES)
 display.o: display.s $(INCLUDES)
 keys.o: keys.s $(INCLUDES)
 model.o: model.s $(INCLUDES)
-snake.o: snake.s $(INCLUDES)
+prng.o: prng.s $(INCLUDES)
 serial.o: serial.s $(INCLUDES)
+snake.o: snake.s $(INCLUDES)
 vectors.o: vectors.s $(INCLUDES)
 
 $(S19_IMAGE): $(BIN_IMAGE) $(ENTRY_TMP)
@@ -51,5 +53,5 @@ $(ENTRY_TMP): $(BIN_IMAGE)
 	echo "0x$${EXECUTION_START}" > $(ENTRY_TMP)
 
 %.o: %.s
-	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
+	$(AS) $(ASFLAGS) $< -o $@ --list-bytes 64 -l $*.lst
 	

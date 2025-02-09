@@ -6,7 +6,10 @@ B:
 		.res 1
 W:
 		.res 2
-
+loop_delay:
+		.res 2
+loop_timer:
+		.res 2
 snake_head_x:
 		.res 1
 snake_head_y:
@@ -19,9 +22,19 @@ next_head_x:
 		.res 1
 next_head_y:
 		.res 1
+prev_head_x:
+		.res 1
+prev_head_y:
+		.res 1
 prev_tail_x:
 		.res 1
 prev_tail_y:
+		.res 1
+food_x:
+		.res 1
+food_y0:
+		.res 1
+food_y1:
 		.res 1
 game_flags:
 		.res 1

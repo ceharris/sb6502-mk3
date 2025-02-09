@@ -1,6 +1,8 @@
 
 		.include "model.h.s"
 		.include "keys.h.s"
+		.include "prng.h.s"
+
 		.segment "CODE"
 
 		GRID_PAGES = GRID_CELLS / 256
@@ -12,31 +14,41 @@
 ;
 model_init:
 		lda #0
+		sta loop_delay
+		sta loop_delay+1
 		sta game_flags
 		sta grow_count
 		sta score
 		sta score+1
-		lda #GAME_START_X
-		sta snake_head_x
-		lda #GAME_START_Y
-		sta snake_head_y
+		ldx #GAME_START_X
+		stx snake_head_x
+		ldy #GAME_START_Y
+		sty snake_head_y
+		jsr _grid_offset
+		stx snake_head_addr
+		sta snake_head_addr+1
 		lda #NUM_LIVES
 		sta lives
 		rts
 
-
 model_reset:
 		jsr _empty_grid
-		lda #16
+		lda #0
 		sta grow_count
 		lda game_flags
 		and #GF_DIRECTION_BITS
 		sta game_flags
-		lda snake_head_x
-		sta snake_tail_x
-		lda snake_head_y
-		sta snake_tail_y
-		jsr _set_snake_tail_addr
+		ldx snake_head_x
+		stx prev_head_x
+		stx snake_tail_x
+		ldy snake_head_y
+		sty prev_head_y
+		sty snake_tail_y
+		jsr _grid_offset
+		stx snake_tail_addr
+		sta snake_tail_addr+1
+		lda #$A
+		sta loop_delay+1
 		rts
 
 ;-----------------------------------------------------------------------
@@ -47,14 +59,48 @@ model_reset:
 ;	carry set if snake bit itself and died
 ;
 model_next:
+		lda loop_delay
+		sta loop_timer
+		lda loop_delay+1
+		sta loop_timer+1
 		jsr _update_head	; determine new head location
 		lda (next_head_addr)	; fetch cell at new head location
+		tax
 		and #SNAKE_CELL		; test for snake cell
 		beq @not_snake		; go if not a snake cell
 		jsr _commit_head	; commit new head location
-		sec			; carry indicates snake bit itself
+		sec			; carry indicates snake killed itself
 		rts
 @not_snake:
+		txa			; recover cell content
+		beq @empty_cell		; go if empty cell
+		; add food value to grow count
+		clc
+		lda grow_count
+		adc (next_head_addr)
+		sta grow_count		; save new grow count
+		lda game_flags
+		and #<(~GF_FOOD_WAITING)
+		ora #(GF_FOOD_CHANGE | GF_FOOD_CONSUMED)
+		sta game_flags
+
+		; reduce the loop delay by food value
+		sec
+		lda loop_delay
+		sbc (food_addr_0)
+		sta loop_delay
+		bcc @remove_food
+		stz loop_delay
+		lda loop_delay+1
+		beq @remove_food
+		dec loop_delay+1
+
+		; remove the food from the grid
+@remove_food:
+		lda #EMPTY_CELL
+		sta (food_addr_0)
+		sta (food_addr_1)
+@empty_cell:
 		; put breadcrumb into current head cell
 		lda game_flags		; fetch flags
 		and #GF_DIRECTION_BITS	; mask off all but direction bits
@@ -70,16 +116,26 @@ model_next:
 		beq @not_growing	; go if not growing
 		dea			; reduce grow count
 		sta grow_count		; store new grow count
+		lda #1
+		jsr _incr_score
 		bra @finish		; finish without updating tail
 
 @not_growing:
 		jsr _update_tail	; determine new tail position
-
 @finish:		
 		jsr _commit_head	; commit new head position
-		
-		lda #1
-		jsr _incr_score
+	
+		; place food if possible
+		lda game_flags
+		and #(GF_FOOD_CONSUMED | GF_FOOD_WAITING)
+		bne @done
+		lda grow_count
+		bne @done		; don't place food if growing
+		jsr _place_food		
+@done:
+		lda game_flags
+		and #<(~GF_FOOD_CONSUMED)
+		sta game_flags
 		clc			; snake still alive
 		rts
 
@@ -100,30 +156,44 @@ model_key_event:
 		beq @move_down
 		cmp #KEY_LEFT
 		beq @move_left
+@wait:
+		dec loop_timer
+		bne @done
+		lda loop_timer+1
+		beq @done
+		dec loop_timer+1
+@done:
+		sec
 		rts
+
 @move_up:
 		lda game_flags
 		ora #<(GF_AXIS_VERTICAL | GF_OP_DECREMENT)
 		sta game_flags
+		clc
 		rts
 @move_right:
 		lda game_flags
 		and #<~(GF_AXIS_VERTICAL | GF_OP_DECREMENT)
 		sta game_flags
+		clc
 		rts
 @move_down:
 		lda game_flags
 		and #<~GF_OP_DECREMENT
 		ora #<GF_AXIS_VERTICAL
 		sta game_flags
+		clc
 		rts
 @move_left:
 		lda game_flags
 		and #<~GF_AXIS_VERTICAL
 		ora #<GF_OP_DECREMENT
 		sta game_flags
+		clc
 		rts
 
+		
 ;-----------------------------------------------------------------------
 ; _empty_grid:
 ; Initializes the game grid by marking all cells as empty.
@@ -162,7 +232,7 @@ _empty_grid:
 ;	snake_head_x, snake_head_y are the current head coordinates
 ; 
 ; On return:
-;	next_head_x, next_head_y are the new new head coordinates
+;	next_head_x, next_head_y are the new head coordinates
 ;	next_head_addr is the grid offset of the new head cell
 ;	snake_head_x, snake_head_y is unchanged
 ;	snake_head_addr is unchanged
@@ -193,26 +263,9 @@ _update_head:
 @next_head_addr:
 		stx next_head_x
 		sty next_head_y
-
-		; Y = 2*next_head_y to find the offset within _y_offset_addr table
-		tya
-		asl
-		tay
-		
-		; fetch address of column 0 in row Y and store in next_head_addr
-		lda _y_offset_addr,y
-		sta next_head_addr
-		lda _y_offset_addr+1,y
+		jsr _grid_offset
+		stx next_head_addr
 		sta next_head_addr+1
-
-		; add the column to get the address of the cell and store in next_head_addr
-		txa			; A = next_head_x
-		clc
-		adc next_head_addr
-		sta next_head_addr
-		bcc @no_carry
-		inc next_head_addr+1
-@no_carry:
 		rts
 
 
@@ -221,8 +274,12 @@ _update_head:
 ; Commits the computed next head position as the new head position.
 ;
 _commit_head:
+		lda snake_head_x
+		sta prev_head_x
 		lda next_head_x
 		sta snake_head_x
+		lda snake_head_y
+		sta prev_head_y
 		lda next_head_y
 		sta snake_head_y
 		lda next_head_addr
@@ -276,40 +333,121 @@ _update_tail:
 		jsr _decr_vertical	; decrement Y coordinate with wrap
 
 @next_tail_addr:
-		; save new tail XY
 		stx snake_tail_x		
 		sty snake_tail_y
 
 		; empty the current tail cell
 		lda #EMPTY_CELL
 		sta (snake_tail_addr)	
+		jsr _grid_offset
+		stx snake_tail_addr
+		sta snake_tail_addr+1
+		rts
 
-		bra _finish_snake_tail_addr
 
-_set_snake_tail_addr:
-		ldx snake_tail_x
-		ldy snake_tail_y
+;-----------------------------------------------------------------------
+; _place_food:
+; Places food into the grid.
+;
+model_place_food:
+_place_food:
+		lda #3+1
+		sta B
+@try_again:
+		dec B
+		bne @choose
+		rts
+@choose:
+		; randomly choose a column
+		lda #GRID_COLUMNS	
+		jsr rnd_range	
+		sta food_x
+		tax
+		; randomly choose a row
+		lda #GRID_ROWS
+		jsr rnd_range
+		sta food_y0
+		tay
+		; compute and save grid offset 
+		jsr _grid_offset
+		stx food_addr_0
+		sta food_addr_0+1
+		; want an empty cell
+		lda (food_addr_0)
+		bne @try_again
+		; is the cooresponding cell in the next row empty?
+		ldy food_y0
+		jsr _incr_vertical
+		sty food_y1
+		ldx food_x
+		jsr _grid_offset
+		stx food_addr_1
+		sta food_addr_1+1
+		lda (food_addr_1)
+		beq @found
+		ldy food_y0
+		jsr _decr_vertical
+		sty food_y1
+		ldx food_x
+		jsr _grid_offset
+		stx food_addr_1
+		sta food_addr_1+1
+		lda (food_addr_1)
+		bne @try_again
+@found:
+		; place food into selected grid cells
+		lda #9
+		jsr rnd_range		; choose 0 <= food value <= 8
+		ina			; now 1 <= food value <= 9
+		sta (food_addr_0)	; put food value into first row
+		sta (food_addr_1)	; put food value into other row
+		; set flags to indicate food is available
+		lda game_flags
+		ora #(GF_FOOD_WAITING|GF_FOOD_CHANGE)
+		sta game_flags
 
-_finish_snake_tail_addr:
-		; Y = 2*snake_tail_y
+		rts
+
+model_withdraw_food:
+		lda #0
+		sta (food_addr_0)
+		sta (food_addr_1)
+		rts
+
+
+;-----------------------------------------------------------------------
+; _grid_offset:
+; Compute the grid offset address for an XY coordinate pair.
+;
+; On entry:
+;	X, Y = grid coordinate pair
+; 
+; On return:
+;	AX = address offset
+;	W = address offset
+;
+_grid_offset:
+		; Y = 2*Y to find the offset within _y_offset_addr table
 		tya
 		asl
 		tay
 		
-		; fetch address of column 0 in the row and store in snake_tail_addr
+		; fetch address of column 0 in row Y and store in W
 		lda _y_offset_addr,y
-		sta snake_tail_addr
+		sta W
 		lda _y_offset_addr+1,y
-		sta snake_tail_addr+1
+		sta W+1
 
-		; add the column to get the address of the cell and store in snake_tail_addr
-		txa			; A = snake_tail_x
+		; add the column to get the address of the cell and store in W
+		txa			; A = X
 		clc
-		adc snake_tail_addr
-		sta snake_tail_addr
+		adc W
+		sta W
+		tax			; X = address LSB
 		bcc @no_carry
-		inc snake_tail_addr+1
+		inc W+1
 @no_carry:
+		lda W+1
 		rts
 
 

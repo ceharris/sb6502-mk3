@@ -9,7 +9,9 @@
 		KEY_QUIT = 5
 		KEY_REDRAW = 6
 		KEY_PLAY = 7
+		KEY_DUMP = 8
 
+		.global key_wait
 		.global key_scan
 
 	.endif
