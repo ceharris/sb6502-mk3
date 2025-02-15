@@ -1,5 +1,6 @@
 
 		.global ser_isr
+		.global timer_isr
 
 		.segment "CODE"
 noop_isr:
@@ -12,7 +13,7 @@ noop_isr:
 		.word ser_isr		; IRQ3 (serial console)
 		.word noop_isr		; IRQ4
 		.word noop_isr		; IRQ5
-		.word noop_isr		; IRQ6
+		.word timer_isr		; IRQ6 (timer)
 		.word noop_isr		; IRQ7
 
 		.segment "MACHVECS"

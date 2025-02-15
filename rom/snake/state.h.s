@@ -2,7 +2,7 @@
 	.ifndef STATE_H
 		STATE_H = 1
 
-		GRID_ROWS = 24
+		GRID_ROWS = 23
 		GRID_COLUMNS = 40
 		GRID_CELLS = GRID_ROWS*GRID_COLUMNS
 
@@ -70,6 +70,7 @@
 		.globalzp food_addr_0
 		.globalzp food_addr_1
 		.globalzp food_expires
+		.globalzp food_last
 		.globalzp lives
 		.globalzp score
 

@@ -7,16 +7,18 @@
 		.include "prog.h.s"
 		.include "serial.h.s"
 		.include "state.h.s"
+		.include "timer.h.s"
 
 		.segment "MAGIC"
 		.word PROG_MAGIC
-		.byte 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, $A, $B, $C, $D, $E, $84
+		.byte 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, $A, $B, $C, $D, $E, $89
 		.word start
 
 		.segment "CODE"
 		.global start
 start:
 		jsr ser_init
+		jsr timer_start
 		cli
 
 play_again:
@@ -105,13 +107,16 @@ game_over:
 		jsr key_scan		; scan for user key presses
 		beq @loop		; no key pressed
 		cmp #KEY_QUIT
-		beq soft_reset
+		beq bye
 		cmp #KEY_REDRAW
 		beq game_over		; redraw game over screen
 		cmp #KEY_PLAY
 		bne @loop
 		jmp play_again
 
+bye:
+		jsr timer_stop
+		jmp soft_reset
 		
 
 		.include "reset.s"	

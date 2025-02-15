@@ -5,6 +5,7 @@
 		.include "prng.h.s"
 		.include "serial.h.s"
 		.include "state.h.s"
+		.include "timer.h.s"
 
 
 	.macro UI_PUT_ANSI_CSI
@@ -159,6 +160,10 @@ ui_clear:
 		ldx #80
 		jsr ser_putsc
 		
+		; display timer label
+		ldiw _timer_label
+		jsr ser_puts
+		
 		; display title label
 		ldiw _title_cup
 		jsr ser_puts
@@ -172,6 +177,9 @@ ui_clear:
 		; display score label
 		ldiw _score_label
 		jsr ser_puts
+
+		; display timer
+		jsr ui_put_timer
 
 		; display current score
 		jsr ui_put_score
@@ -272,8 +280,14 @@ ui_update:
 
 		lda game_flags
 		and #GF_SCORE_CHANGE
-		beq @done
+		beq @check_timer
 		jsr ui_put_score
+
+@check_timer:
+		lda game_flags
+		and #GF_TIMER_CHANGE
+		beq @done
+		jsr ui_put_timer
 
 @done:
 		; clear UI change flags
@@ -528,6 +542,21 @@ ui_put_life_count:
 		ldiw _lives_post
 		jsr ser_puts
 		rts
+
+
+;-----------------------------------------------------------------------
+; ui_put_timer:
+; Displays the current timer in the status line.
+;
+ui_put_timer:
+		ldiw _timer_pre
+		jsr ser_puts		
+		lda food_expires
+		jsr _pbcd8
+		ldiw _timer_post
+		jsr ser_puts
+		rts
+
 
 ;-----------------------------------------------------------------------
 ; ui_put_score:
@@ -816,9 +845,9 @@ _phex4:
 ; character must not be transmitted to the terminal when sending such
 ; column numbers.
 ; 
-; The game grid consists of 40 x 24 cells, therefore there are 40 table
+; The game grid consists of 40 x 23 cells, therefore there are 40 table
 ; entries. Each table entry represents two consecutive columns of the
-; 80x25 terminal display.
+; 80x24 terminal display.
 ;
 grid_x_to_column:
 		.byte "1",0
@@ -873,8 +902,8 @@ grid_x_to_column:
 ; character must not be transmitted to the terminal when sending such
 ; row numbers.
 ;
-; The game grid consists of 40 x 24 cells, therefore there are 24 table
-; entries. Each table entry represents one row of the 80x25 terminal
+; The game grid consists of 40 x 23 cells, therefore there are 23 table
+; entries. Each table entry represents one row of the 80x24 terminal
 ; display.
 ;
 grid_y_to_row:
@@ -901,7 +930,6 @@ grid_y_to_row:
 		.byte "21"
 		.byte "22"
 		.byte "23"
-		.byte "24"
 
 		.macro SGR_RESET
 		.byte ESC,"[0m"
@@ -924,6 +952,7 @@ _clear_display:
 		
 _status_line_post:
 _lives_post:
+_timer_post:
 _score_post:
 _play_again_post:
 _game_over_post:
@@ -931,19 +960,19 @@ _game_over_post:
 		.byte 0
 
 _status_line_pre:
-		.byte ESC,"[25;1H"
+		.byte ESC,"[24;1H"
 		BG_BLUE
 		FG_WHITE
 		.byte 0
 
 _title_cup:
-		.byte ESC,"[25;34H",0
+		.byte ESC,"[24;34H",0
 
 _title_label:
 		.byte "SNAKE!",0
 
 _game_over_pre:
-		.byte ESC,"[25;32H"
+		.byte ESC,"[24;32H"
 		BG_BLUE
 		FG_WHITE
 		.byte 0
@@ -953,25 +982,34 @@ _game_over_label:
 		GAME_OVER_LENGTH = * - _game_over_label
 
 _lives_label:
-		.byte ESC,"[25;60HLives 0",0
+		.byte ESC,"[24;60HLives 0",0
 
 _lives_pre:
-		.byte ESC,"[25;66H"
+		.byte ESC,"[24;66H"
 		BG_BLUE
 		FG_WHITE
 		.byte 0
 
 _score_label:
-		.byte ESC,"[25;69HScore    0",0
+		.byte ESC,"[24;69HScore    0",0
+
+_timer_label:
+		.byte ESC,"[24;3HTime ",0
+
+_timer_pre:
+		.byte ESC,"[24;8H"
+		BG_BLUE
+		FG_WHITE
+		.byte 0
 
 _score_pre:
-		.byte ESC,"[25;75H"
+		.byte ESC,"[24;75H"
 		BG_BLUE
 		FG_WHITE
 		.byte 0
 
 _play_again_pre:
-		.byte ESC,"[25;3H"
+		.byte ESC,"[24;3H"
 		BG_BLUE
 		FG_WHITE
 		.byte 0

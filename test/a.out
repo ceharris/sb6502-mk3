@@ -1,0 +1,104 @@
+Sections:
+section org0001:400 (attr=<acrwx> align=1):
+     400: opts: dp=0000 a=8 x=8
+     400: symbol: ticks EXPR(1024=0x400) ABS 
+     400: data(1): 00 
+     401: data(1): 00 
+     402: data(1): 00 
+     403: data(1): 00 
+     404: symbol: DDDD EXPR(1028=0x404) UNUSED ABS 
+     404: data(1): 00 
+     405: data(1): 00 
+     406: symbol: HH EXPR(1030=0x406) ABS 
+     406: data(1): 00 
+     407: symbol: MM EXPR(1031=0x407) ABS 
+     407: data(1): 00 
+     408: symbol: SS EXPR(1032=0x408) ABS 
+     408: data(1): 00 
+     409: symbol: CC EXPR(1033=0x409) ABS 
+     409: data(1): 00 
+section org0002:500 (attr=<acrwx> align=1):
+     500: opts: dp=0000 a=8 x=8
+     500: symbol: timer_isr EXPR(1280=0x500) ABS 
+     500: data(3): ee 00 04 
+     503: data(2): d0 0f 
+     505: data(3): ee 01 04 
+     508: data(2): d0 0a 
+     50a: data(3): ee 02 04 
+     50d: data(2): d0 05 
+     50f: data(3): ee 03 04 
+     512: data(2): d0 00 
+     514: symbol: _time EXPR(1300=0x514) ABS 
+     514: data(1): f8 
+     515: data(1): 18 
+     516: data(3): ad 09 04 
+     519: data(2): 69 01 
+     51b: data(3): 8d 09 04 
+     51e: data(2): 90 42 
+     520: data(3): ad 08 04 
+     523: data(2): 69 00 
+     525: data(3): 8d 08 04 
+     528: data(2): c9 60 
+     52a: data(2): d0 36 
+     52c: data(3): 9c 08 04 
+     52f: data(1): 38 
+     530: data(3): ad 07 04 
+     533: data(2): 69 00 
+     535: data(3): 8d 07 04 
+     538: data(2): c9 60 
+     53a: data(2): d0 26 
+     53c: data(3): 9c 07 04 
+     53f: data(1): 38 
+     540: data(3): ad 06 04 
+     543: data(2): 69 00 
+     545: data(3): 8d 06 04 
+     548: data(2): c9 24 
+     54a: data(2): d0 16 
+     54c: data(3): 9c 06 04 
+     54f: data(1): 38 
+     550: data(3): ad 01 00 rabs(1,0-15,0xffff,0x1,DD IMP REF ) 
+     553: data(2): 69 00 
+     555: data(3): 8d 01 00 rabs(1,0-15,0xffff,0x1,DD IMP REF ) 
+     558: data(2): 90 08 
+     55a: data(3): ad 00 00 rabs(1,0-15,0xffff,0,DD IMP REF ) 
+     55d: data(2): 69 00 
+     55f: data(3): 8d 00 00 rabs(1,0-15,0xffff,0,DD IMP REF ) 
+     562: symbol: _done EXPR(1378=0x562) ABS 
+     562: data(1): d8 
+     563: data(1): 40 
+section org0003:580 (attr=<acrwx> align=1):
+     580: opts: dp=0000 a=8 x=8
+     580: data(2): a9 00 
+     582: data(3): 8d ee ff 
+     585: data(2): a9 05 
+     587: data(3): 8d ef ff 
+     58a: data(2): a9 48 
+     58c: data(2): 85 04 
+     58e: data(2): a9 00 
+     590: data(2): 85 05 
+     592: data(2): a9 02 
+     594: data(3): 8d 80 ff 
+     597: data(2): a9 43 
+     599: data(3): 8d 81 ff 
+     59c: data(2): a9 02 
+     59e: data(3): 8d 80 ff 
+     5a1: data(1): 60 
+Symbols:
+T2_MSB EXPR(4=0x4) EQU 
+T2_LSB EXPR(5=0x5) EQU 
+TIMER_COUNT EXPR(18432=0x4800) EQU 
+CR2 EXPR(65409=0xff81) EQU 
+CR13 EXPR(65408=0xff80) EQU 
+DD IMP REF 
+_done EXPR(1378=0x562) ABS 
+_time EXPR(1300=0x514) ABS 
+timer_isr EXPR(1280=0x500) ABS 
+CC EXPR(1033=0x409) ABS 
+SS EXPR(1032=0x408) ABS 
+MM EXPR(1031=0x407) ABS 
+HH EXPR(1030=0x406) ABS 
+DDDD EXPR(1028=0x404) UNUSED ABS 
+ticks EXPR(1024=0x400) ABS 
+__RPTCNT EXPR(-1=0xffffffff) INTERNAL 
+__VASM EXPR(0=0x0) INTERNAL 
+__UNIXFS EXPR(0=0x0) INTERNAL 

@@ -2,6 +2,7 @@
 		.include "model.h.s"
 		.include "keys.h.s"
 		.include "prng.h.s"
+		.include "timer.h.s"
 
 		.segment "CODE"
 
@@ -20,6 +21,8 @@ model_init:
 		sta grow_count
 		sta score
 		sta score+1
+		sta food_last
+		sta food_expires
 		ldx #GAME_START_X
 		stx snake_head_x
 		ldy #GAME_START_Y
@@ -49,6 +52,9 @@ model_reset:
 		sta snake_tail_addr+1
 		lda #$A
 		sta loop_delay+1
+		stz food_expires
+		lda chrono_second
+		sta food_last
 		rts
 
 ;-----------------------------------------------------------------------
@@ -63,6 +69,7 @@ model_next:
 		sta loop_timer
 		lda loop_delay+1
 		sta loop_timer+1
+		jsr _age_food		; age food if present
 		jsr _update_head	; determine new head location
 		lda (next_head_addr)	; fetch cell at new head location
 		tax
@@ -79,9 +86,10 @@ model_next:
 		lda grow_count
 		adc (next_head_addr)
 		sta grow_count		; save new grow count
+		stz food_expires
 		lda game_flags
 		and #<(~GF_FOOD_WAITING)
-		ora #(GF_FOOD_CHANGE | GF_FOOD_CONSUMED)
+		ora #(GF_FOOD_CHANGE | GF_FOOD_CONSUMED | GF_TIMER_CHANGE)
 		sta game_flags
 
 		; reduce the loop delay by food value
@@ -346,10 +354,54 @@ _update_tail:
 
 
 ;-----------------------------------------------------------------------
+; _age_food:
+; Ages food that is waiting to be eaten.
+;
+_age_food:
+		lda chrono_second
+		cmp food_last
+		bne @check_for_food
+		rts
+
+@check_for_food:
+		; is food waiting?
+		lda game_flags
+		and #GF_FOOD_WAITING
+		bne @food_waiting
+		rts
+@food_waiting:		
+		lda food_expires
+		sed
+		sec
+		sbc #1
+		cld
+		sta food_expires
+		bne @not_expired
+
+		; withdraw food
+		lda #EMPTY_CELL	
+		sta (food_addr_0)
+		sta (food_addr_1)
+		lda game_flags
+		and #<~(GF_FOOD_WAITING)
+		ora #(GF_FOOD_CHANGE|GF_FOOD_CONSUMED)
+		sta game_flags
+		sec
+		bra @done
+@not_expired:
+		lda chrono_second
+		sta food_last
+		lda game_flags
+		ora #GF_TIMER_CHANGE
+		sta game_flags
+@done:
+		rts
+
+
+;-----------------------------------------------------------------------
 ; _place_food:
 ; Places food into the grid.
 ;
-model_place_food:
 _place_food:
 		lda #3+1
 		sta B
@@ -401,17 +453,22 @@ _place_food:
 		ina			; now 1 <= food value <= 9
 		sta (food_addr_0)	; put food value into first row
 		sta (food_addr_1)	; put food value into other row
+		; choose expiration between 3 and 10 seconds
+		lda #8
+		jsr rnd_range		; choose <= TTL < 8
+		sed	
+		clc
+		adc #3			; now 3 <= TTL <= 10
+		cld
+		sta food_expires
+		; save current time
+		lda chrono_second
+		sta food_last
 		; set flags to indicate food is available
 		lda game_flags
-		ora #(GF_FOOD_WAITING|GF_FOOD_CHANGE)
+		ora #(GF_FOOD_WAITING|GF_FOOD_CHANGE|GF_TIMER_CHANGE)
 		sta game_flags
 
-		rts
-
-model_withdraw_food:
-		lda #0
-		sta (food_addr_0)
-		sta (food_addr_1)
 		rts
 
 

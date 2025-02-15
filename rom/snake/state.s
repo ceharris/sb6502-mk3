@@ -52,8 +52,10 @@ food_addr_0:
 		.res 2
 food_addr_1:
 		.res 2
+food_last:
+		.res 1
 food_expires:
-		.res 2
+		.res 1
 score:
 		.res 2
 

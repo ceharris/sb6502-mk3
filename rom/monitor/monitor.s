@@ -4,6 +4,7 @@
 		.include "prog.h.s"
 		.include "registers.h.s"
 		.include "stdio.h.s"
+		.include "timer.h.s"
 
 		.global fill
 		.global peek
@@ -29,6 +30,7 @@ input_buf_end:
 		.global monitor
 monitor:
 		jsr cinit
+		jsr timer_start
 		cli
 		ldiw1 0
 command:	
@@ -73,6 +75,8 @@ command:
 		beq @call
 		cmp #'Q'
 		beq @quit
+		cmp #'T'
+		beq @time
 @error:
 		lda #BEL
 		jsr cputc
@@ -131,8 +135,102 @@ command:
 		jmp (w1)
 
 @quit:
+		jsr timer_stop
 		jmp quit
 
+
+@time:		
+		lda chrono_day
+		ldx chrono_day+1
+		jsr _pbcd16
+		lda #'d'
+		jsr cputc
+		lda #SPC
+		jsr cputc
+		lda chrono_hour
+		jsr _pbcd8u
+		lda #':'
+		jsr cputc
+		lda chrono_minute
+		jsr _pbcd8u
+		lda #':'
+		jsr cputc
+		lda chrono_second
+		sta b0
+		jsr _pbcd8u
+		lda #'.'
+		jsr cputc
+		lda chrono_centisecond
+		jsr _pbcd8u
+		lda #LF
+		jsr cputc
+@wait:
+		lda chrono_second
+		cmp b0
+		bne @time
+		jsr cgetc
+		bcc @wait
+		jmp command
+
+
+;-----------------------------------------------------------------------
+; _pbcd16:
+; Prints a 16-bit BCD value.
+;
+; On entry:
+;	AX = 16 bit value to print
+;
+; On return:
+;	A clobbered
+;
+_pbcd16:
+		cmp #0			; is MSB zero?
+		beq @print_lsb		; go print it
+		jsr _pbcd8		; print MSB
+		txa
+		jsr _pbcd8u		; print LSB
+		rts
+@print_lsb:
+		txa
+		jsr _pbcd8		; print LSB
+		rts
+
+;-----------------------------------------------------------------------
+; _pbcd8:
+; Prints an 8-bit BCD value.
+;
+; On entry:
+;	A = 8-bit value to print
+;
+; On return:
+;	A clobbered
+;
+_pbcd8:
+		pha
+		and #$f0		; is upper nibble zero?
+		bne _pbcd_upper		; go print it
+		bra _pbcd_lower
+		; this entry point prints a leading zero
+_pbcd8u:
+		pha
+_pbcd_upper:
+		; move upper nibble to lower nibble
+		lsr
+		lsr
+		lsr
+		lsr
+		; convert to ASCII digit
+		clc
+		adc #'0'
+		jsr cputc
+_pbcd_lower:
+		pla			; recover arg to print
+		and #$0f		; discard upper nibble
+		; convert to ASCII digit
+		clc
+		adc #'0'
+		jsr cputc
+		rts
 
 ;-----------------------------------------------------------------------
 ; show_prompt

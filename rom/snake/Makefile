@@ -11,9 +11,9 @@ HEX_IMAGE=$(EXECUTABLE).hex
 ENTRY_TMP=entry.tmp
 
 INCLUDES=$(LD_CONFIG) delay.h.s display.h.s keys.h.s model.h.s prng.h.s \
-	serial.h.s state.h.s ../include/ascii.h.s ../include/ports.h.s
+	serial.h.s state.h.s timer.h.s ../include/ascii.h.s ../include/ports.h.s
 MODULES=snake.o delay.o display.o keys.o model.o prng.o serial.o state.o \
-	vectors.o
+	timer.o vectors.o
 
 AS=ca65
 ASFLAGS=--cpu 65c02 -I ../include
@@ -32,6 +32,7 @@ model.o: model.s $(INCLUDES)
 prng.o: prng.s $(INCLUDES)
 serial.o: serial.s $(INCLUDES)
 snake.o: snake.s $(INCLUDES)
+timer.o: timer.s $(INCLUDES)
 vectors.o: vectors.s $(INCLUDES)
 
 $(S19_IMAGE): $(BIN_IMAGE) $(ENTRY_TMP)

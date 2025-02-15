@@ -18,9 +18,10 @@ INCLUDES=$(LD_CONFIG) \
 	../include/ports.h.s \
 	../include/prog.h.s \
 	../include/stdio.h.s \
+	timer.h.s \
 	registers.h.s
 
-MODULES=monitor.o fill.o peek.o poke.o quit.o hex.o stdio.o acia.o registers.o vectors.o
+MODULES=monitor.o fill.o peek.o poke.o quit.o hex.o stdio.o acia.o registers.o timer.o vectors.o
 
 AS=ca65
 LD=ld65
@@ -42,6 +43,7 @@ poke.o: poke.s $(INCLUDES)
 quit.o: quit.s $(INCLUDES)
 registers.o: registers.s $(INCLUDES)
 stdio.o: ../lib/stdio.s $(INCLUDES)
+timer.o: timer.s $(INCLUDES)
 vectors.o: vectors.s $(INCLUDES)
 
 $(S19_IMAGE): $(BIN_IMAGE) $(ENTRY_TMP)
