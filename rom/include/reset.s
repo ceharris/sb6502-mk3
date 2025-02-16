@@ -29,6 +29,7 @@ _PIVOT_FN_LENGTH := *-pivot_fn
 soft_reset:
 		; quiesce the system
                 sei
+                cld
                 ; reset the ACIA used for the console
                 lda #_ACIA_RESET
                 sta _ACIA_CTRL
