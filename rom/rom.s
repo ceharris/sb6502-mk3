@@ -11,6 +11,9 @@
 		.segment "IPL"
 		.incbin "ipl/ipl.bin"
 
+		.segment "RAMTEST"
+		.incbin "ramtest/ramtest.bin"
+
 		.segment "SNAKE"
 		.incbin "snake/snake.bin"
 

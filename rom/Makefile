@@ -21,6 +21,7 @@ clean:
 	make -C monitor clean
 	make -C msbasic clean
 	make -C ehbasic clean
+	make -C ramtest clean
 	make -C snake clean
 	make -C taliforth clean
 	-rm -f *.bin *.lbl *.lst *.map *.o *.sym
@@ -30,6 +31,7 @@ rom.bin:
 	make -C monitor all
 	make -C msbasic all
 	make -C ehbasic all
+	make -C ramtest all
 	make -C snake all
 	make -C taliforth all taliforth-sbmk3.bin
 	$(AS) $(ASFLAGS) rom.s -o rom.o -l $*.lst
