@@ -8415,8 +8415,6 @@ TAB_POWR
 LAB_KEYT
 	.byte	3,'E'
 	.word	LBB_END		; END
-	.byte	3,'E'
-	.word	LBB_EXIT	; EXIT
 	.byte	3,'F'
 	.word	LBB_FOR		; FOR
 	.byte	4,'N'
@@ -8501,6 +8499,8 @@ LAB_KEYT
 	.word	LBB_IRQ		; IRQ
 	.byte	3,'N'
 	.word	LBB_NMI		; NMI
+	.byte	4,'E'
+	.word	LBB_EXIT	; EXIT
 
 ; secondary commands (can't start a statement)
 
