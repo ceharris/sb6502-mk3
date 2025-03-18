@@ -43,6 +43,9 @@ vectors.o: vectors.s $(INCLUDES)
 $(IMAGE): $(MODULES)
 	$(LD) $(LDFLAGS) $^ -o $@ -m $*.map -Ln $*.lbl
 
-%.o: */%.s
+%.o: %.s
 	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
-	
+
+%.o: ../lib/%.s
+	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
+

@@ -54,5 +54,9 @@ $(ENTRY_TMP): $(BIN_IMAGE)
 	echo "0x$${EXECUTION_START}" > $(ENTRY_TMP)
 
 %.o: %.s
-	$(AS) $(ASFLAGS) $< -o $@ --list-bytes 64 -l $*.lst
+	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
+
+%.o: ../lib/%.s
+	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
+
 	

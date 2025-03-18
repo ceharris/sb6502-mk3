@@ -64,6 +64,9 @@ $(ENTRY_TMP): $(BIN_IMAGE)
 	EXECUTION_START=$$(cat $(ENTRY_TMP)); \
 	echo "0x$${EXECUTION_START}" > $(ENTRY_TMP)
 
-%.o: */%.s
+%.o: %.s
 	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
-	
+
+%.o: ../lib/%.s
+	$(AS) $(ASFLAGS) $< -o $@ -l $*.lst
+
